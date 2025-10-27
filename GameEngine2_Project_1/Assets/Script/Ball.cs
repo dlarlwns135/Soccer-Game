@@ -64,7 +64,7 @@ public class Ball : MonoBehaviour
         if (Owner != null)
         {
             // 소유 중: 발 앞을 따라가게 (원하면 스프링/보간로직로 대체)
-            Vector3 followPos = Owner.position + Owner.forward * 1.0f;
+            Vector3 followPos = Owner.position + Owner.forward * 0.5f + Owner.right * 0.5f;
             rb.MovePosition(followPos);
             return;
         }

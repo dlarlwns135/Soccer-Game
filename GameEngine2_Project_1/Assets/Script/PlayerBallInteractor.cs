@@ -7,6 +7,9 @@ public class PlayerBallInteractor : MonoBehaviour
     public Ball ball;                 // GameManager에서 주입하거나 에디터에서 드래그
     public Transform foot;            // 발(또는 공과 거리 잴 기준점)
 
+    public bool HasBall => ball && ball.Owner == transform;
+    public Transform BallTransform => ball ? ball.transform : null;
+
     [Header("Distances")]
     public float pickUpRadius = 0.7f; // 공이 자유일 때 소유
     public float stealRadius = 0.6f; // 남이 들고 있을 때 뺏기
