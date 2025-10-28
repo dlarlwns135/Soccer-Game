@@ -3,7 +3,7 @@ using UnityEngine;
 public class GlobalSlowmo : MonoBehaviour
 {
     [Range(0.01f, 1f)]
-    public float slowScale = 0.2f;   // 슬로모 비율 (0.2 = 20%)
+    public float slowScale = 0.1f;   // 슬로모 비율 (0.2 = 20%)
     private float originalFixedDelta;
 
     void Start()

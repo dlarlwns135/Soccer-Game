@@ -83,7 +83,7 @@ public class PlayerBallInteractor : MonoBehaviour
             Vector3 dir = (transform.forward
                        + Vector3.up * 0.5f
                        - transform.right * 0.1f).normalized;
-            float impulse = 10f;
+            float impulse = 18f;
             ball.Kick(dir, impulse);
         }
     }
@@ -110,7 +110,7 @@ public class PlayerBallInteractor : MonoBehaviour
         if (owner == transform)
         {
             // 내 앞(오른쪽 0.0, 위 0.0, 앞 0.5~0.7m 등)으로 보조
-            Vector3 localOffset = new Vector3(0.0f, 0.0f, 0.6f);
+            Vector3 localOffset = new Vector3(0.2f, 0.0f, 0.5f);
             ball.EnableAssist(transform, localOffset);
         }
         else
