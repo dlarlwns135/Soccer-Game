@@ -51,7 +51,7 @@ public class PlayerBallInteractor : MonoBehaviour
         // 1) 공이 자유면: 주워오기 (쿨다운 체크 추가!)
         if (ball.IsFree)
         {
-            if (Time.time >= pickupBlockedUntil &&               // ★ 추가
+            if (Time.time >= pickupBlockedUntil &&               // 추가
                 distSqr <= pickUpRadius * pickUpRadius &&
                 NotObstructed(bp))
             {
@@ -75,15 +75,17 @@ public class PlayerBallInteractor : MonoBehaviour
     {
         if (HasBall && ball != null)
         {
-            // 킥 직후 일정 시간은 줍기 금지
             pickupBlockedUntil = Time.time + pickupBlockAfterKick;
 
-            // 바라보는 방향 + 살짝 위로
+            // 킥 직전엔 보조를 끄고 자유공으로
+            ball.DisableAssist();
+
             Vector3 dir = (transform.forward + Vector3.up * 0.1f).normalized;
-            float impulse = 10f; // 필요에 맞게 조정
+            float impulse = 10f;
             ball.Kick(dir, impulse);
         }
     }
+
 
     bool NotObstructed(Vector3 ballPos)
     {
@@ -95,11 +97,24 @@ public class PlayerBallInteractor : MonoBehaviour
 
     void OnBallOwnerChanged(Transform owner)
     {
-        // 선택: 애니메이터에 HasBall 같은 파라미터를 쓴다면 반영
         if (anim)
         {
             int hHasBall = Animator.StringToHash("HasBall");
             if (hHasBall != 0) anim.SetBool(hHasBall, owner == transform);
         }
+
+        if (ball == null) return;
+
+        if (owner == transform)
+        {
+            // 내 앞(오른쪽 0.0, 위 0.0, 앞 0.5~0.7m 등)으로 보조
+            Vector3 localOffset = new Vector3(0.0f, 0.0f, 0.6f);
+            ball.EnableAssist(transform, localOffset);
+        }
+        else
+        {
+            ball.DisableAssist();
+        }
     }
+
 }
