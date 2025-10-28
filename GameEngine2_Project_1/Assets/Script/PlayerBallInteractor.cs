@@ -80,7 +80,9 @@ public class PlayerBallInteractor : MonoBehaviour
             // 킥 직전엔 보조를 끄고 자유공으로
             ball.DisableAssist();
 
-            Vector3 dir = (transform.forward + Vector3.up * 0.1f).normalized;
+            Vector3 dir = (transform.forward
+                       + Vector3.up * 0.5f
+                       - transform.right * 0.1f).normalized;
             float impulse = 10f;
             ball.Kick(dir, impulse);
         }

@@ -147,7 +147,7 @@ public class Ball : MonoBehaviour
             // 공통: 오너 수평 속도 + 히스테리시스 토글
             Vector3 ccVel = (_ownerCC != null) ? _ownerCC.velocity : Vector3.zero;
             float planarSpeed = new Vector3(ccVel.x, 0f, ccVel.z).magnitude;
-            Debug.Log($"Ball FixedUpdate - planarSpeed: {planarSpeed}");
+            //Debug.Log($"Ball FixedUpdate - planarSpeed: {planarSpeed}");
 
             if (_followSuppressed)
             {
