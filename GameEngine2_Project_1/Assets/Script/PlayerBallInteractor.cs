@@ -4,8 +4,8 @@ using UnityEngine;
 public class PlayerBallInteractor : MonoBehaviour
 {
     [Header("Refs")]
-    public Ball ball;                 // GameManager에서 주입하거나 에디터에서 드래그
-    public Transform foot;            // 발(또는 공과 거리 잴 기준점)
+    public Ball ball;                
+    public Transform foot;           
 
     public bool HasBall => ball && ball.Owner == transform;
     public Transform BallTransform => ball ? ball.transform : null;
@@ -17,6 +17,10 @@ public class PlayerBallInteractor : MonoBehaviour
     [Header("Tuning")]
     public float stealCooldown = 0.25f;  // 연속 뺏기 방지
     public LayerMask obstructionMask = 0; // 선택: 사이에 벽/장애물 있으면 차단
+
+    [Header("Pickup/Kick Control")]
+    public float pickupBlockAfterKick = 0.25f; // 킥 후 이 시간 동안은 줍기 금지
+    float pickupBlockedUntil = -1f;
 
     Animator anim;
     float lastStealTime = -999f;
@@ -44,10 +48,12 @@ public class PlayerBallInteractor : MonoBehaviour
         Vector3 bp = ball.transform.position;
         float distSqr = (bp - foot.position).sqrMagnitude;
 
-        // 1) 공이 자유면: 주워오기
+        // 1) 공이 자유면: 주워오기 (쿨다운 체크 추가!)
         if (ball.IsFree)
         {
-            if (distSqr <= pickUpRadius * pickUpRadius && NotObstructed(bp))
+            if (Time.time >= pickupBlockedUntil &&               // ★ 추가
+                distSqr <= pickUpRadius * pickUpRadius &&
+                NotObstructed(bp))
             {
                 ball.SetOwner(transform);
                 return;
@@ -63,7 +69,20 @@ public class PlayerBallInteractor : MonoBehaviour
                 lastStealTime = Time.time;
             }
         }
-        // 3) 내가 소유 중이면(선택) 애니메이터/드리블 보조 등 처리 가능
+    }
+
+    void OnKickContact()
+    {
+        if (HasBall && ball != null)
+        {
+            // 킥 직후 일정 시간은 줍기 금지
+            pickupBlockedUntil = Time.time + pickupBlockAfterKick;
+
+            // 바라보는 방향 + 살짝 위로
+            Vector3 dir = (transform.forward + Vector3.up * 0.1f).normalized;
+            float impulse = 10f; // 필요에 맞게 조정
+            ball.Kick(dir, impulse);
+        }
     }
 
     bool NotObstructed(Vector3 ballPos)

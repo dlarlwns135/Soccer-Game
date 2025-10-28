@@ -24,7 +24,7 @@ public class PlayerAnimatorInput : MonoBehaviour
 
     float moveX, moveY;
     float velX, velY;
-    float chargeStart; bool charging;
+    float chargeStart; bool charging; bool isShooting = false;
 
     void Awake()
     {
@@ -89,13 +89,14 @@ public class PlayerAnimatorInput : MonoBehaviour
 
         // 5) D키 차지/발사
         if (Input.GetKeyDown(KeyCode.D)) { charging = true; chargeStart = Time.time; }
-        if (Input.GetKeyUp(KeyCode.D))
+        if (!isShooting && Input.GetKeyUp(KeyCode.D))
         {
             charging = false;
             float held = Mathf.Clamp01((Time.time - chargeStart) / Mathf.Max(0.0001f, shootChargeTimeMax));
             int shootType = (held >= heavyThreshold01) ? 2 : 1; // 1=Light, 2=Heavy
             anim.SetInteger(hShootType, shootType);
             anim.SetTrigger(hDoShoot);
+            isShooting = true;
         }
 
         // 6) 회전: C가 꺼져있을 때만 입력 방향을 바라보게
@@ -122,5 +123,10 @@ public class PlayerAnimatorInput : MonoBehaviour
             if (n.tagHash == hTagAction) return true;
         }
         return false;
+    }
+
+    public void OnShootEnd()
+    {
+        isShooting = false;
     }
 }

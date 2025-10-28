@@ -55,22 +55,15 @@ ModelImporter:
       bodyMask: 01000000010000000100000001000000010000000100000001000000010000000100000001000000010000000100000001000000
       curves: []
       events:
-      - time: 0
-        functionName: OnKickEnter
+      - time: 0.3062606
+        functionName: OnKickContact
         data: 
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
         intParameter: 0
         messageOptions: 0
       - time: 1
-        functionName: OnKickExit
-        data: 
-        objectReferenceParameter: {instanceID: 0}
-        floatParameter: 0
-        intParameter: 0
-        messageOptions: 0
-      - time: 0.3062606
-        functionName: OnKickContact
+        functionName: OnShootEnd
         data: 
         objectReferenceParameter: {instanceID: 0}
         floatParameter: 0
