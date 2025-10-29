@@ -88,6 +88,11 @@ public class PlayerBallInteractor : MonoBehaviour
         }
     }
 
+    public void TriggerKickFromFoot()
+    {
+        Debug.Log("TriggerKickFromFoot called");
+        OnKickContact(); // 내부 로직 그대로 사용
+    }
 
     bool NotObstructed(Vector3 ballPos)
     {
