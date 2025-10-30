@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Events;
 
 [RequireComponent(typeof(Animator))]
 [RequireComponent(typeof(PlayerBallInteractor))]
@@ -6,38 +7,60 @@ public class KickWithCurve : MonoBehaviour
 {
     public FootCurveData footData;
     public AvatarIKGoal kickingFoot = AvatarIKGoal.RightFoot;
-    public Vector3 contactOffset = new Vector3(0f, -0.02f, 0.05f);
+    public Vector3 contactOffset = new Vector3(0f, 0f, 0.05f);
 
     [Range(0, 1)] public float peakWeight = 1f;
 
-    [Header("Timing")]
-    [Tooltip("°ø¿¡ ½ÇÁ¦·Î ´ê´Â Á¤±ÔÈ­ ½ÃÁ¡ (0~1)")]
-    public float contactNorm = 0.31f;
+    [Header("Approach Control")]
+    public float riseSpeed = 3f;
+    public float maxIKStep = 0.08f;
 
-    [SerializeField, Range(0f, 1f)]
-    float releaseNorm = 0.40f;
+    [Header("Stabilize")]
+    public float targetSmooth = 30f;
+    public float maxTargetStep = 0.15f;
+    public float maxAnkleRise = 0.10f;
 
-    [Header("Latch")]
-    [Tooltip("contactNorm - ÀÌ °ª ½ÃÁ¡¿¡¼­ °ø À§Ä¡¸¦ »ùÇÃ¸µÇØ °íÁ¤")]
-    [Range(0.0f, 0.2f)]
-    public float preContactSampleOffset = 0.01f;   // ¿¹: contactNormÀÌ 0.31ÀÌ¸é 0.30 ½ÃÁ¡¿¡¼­ °íÁ¤
-    [Tooltip("releaseNormÀ» Áö³­ µÚ ÀÌ ½Ã°£¸¸Å­ Áö³ª¸é ·¡Ä¡ ÇØÁ¦(·çÇÁ ´ëºñ)")]
-    public float unlatchDelay = 0.05f;
+    [Header("IK Activation (Ball Proximity)")]
+    [Tooltip("ì´ ê±°ë¦¬ ì´ë‚´ë¡œ ê³µì´ ë“¤ì–´ì˜¤ë©´ IK í™œì„±")]
+    public float enableRadius = 1.0f;
+    [Tooltip("ì´ ê±°ë¦¬ ë°–ìœ¼ë¡œ ê³µì´ ë‚˜ê°€ë©´ IK ë¹„í™œì„±(í˜ì´ë“œì•„ì›ƒ ì‹œì‘)")]
+    public float disableRadius = 1.2f;
 
-    private Animator anim;
-    private PlayerBallInteractor interactor;
+    [Header("Knee Hint (optional)")]
+    public Transform kneeHint;
 
-    // Latch »óÅÂ
-    bool _latched = false;
-    Vector3 _latchedBallPos;
-    float _prevNorm = 0f;
-    float _unlatchAt = -1f;
+    [Header("Failsafe: Forced Kick")]
+    public bool useForcedKick = true;
+    public float forceKickDistance = 0.09f;
+    [Range(0f, 1f)] public float minWeightToForce = 0.55f;
+    public float forceKickCooldown = 0.10f;
+    public UnityEvent onForcedKick;
 
-    [Header("Debug")]
+    [Header("Debug/Gizmos")]
     public bool drawDebug = true;
     public Color curveColor = Color.yellow;
     public Color targetColor = Color.red;
-    [SerializeField] private float weightDebug;
+    public Color correctedColor = Color.cyan;
+    public int curveSteps = 24;
+
+    Animator anim;
+    PlayerBallInteractor interactor;
+
+    bool _hadBallPrev = false;
+    bool _fadingOut = false;
+    float _releaseStartNorm = 0f;
+    float _prevNorm = 0f;
+
+    float _riseWeight = 0f;
+
+    Vector3 _smoothedTarget;
+    bool _hasSmoothed = false;
+
+    Vector3 _gizmoBaseFoot, _gizmoTarget, _gizmoCorrected;
+    float _lastForceTime = -999f;
+
+    // ê³µ ê·¼ì ‘ ì—¬ë¶€(íˆìŠ¤í…Œë¦¬ì‹œìŠ¤)
+    bool _nearBall = false;
 
     void Awake()
     {
@@ -47,131 +70,147 @@ public class KickWithCurve : MonoBehaviour
 
     void OnAnimatorIK(int layerIndex)
     {
-        if (!footData) { ResetLatch(); return; }
+        if (!footData) { ResetAll(); return; }
 
         var st = anim.GetCurrentAnimatorStateInfo(layerIndex);
-        if (!st.IsTag("Action")) { ResetLatch(); return; }
+        if (!st.IsTag("Action")) { ResetAll(); return; }
 
         float norm = st.normalizedTime % 1f;
 
-        // Å± À©µµ¿ì(·¡Ä¡ À¯Áö ¿ëµµ)
-        const float postWindow = 0.08f;
-        bool inKickWindow = norm <= (releaseNorm + postWindow);
-
-        // ·çÇÁ °¨Áö
-        if (norm < _prevNorm) ResetLatch();
+        if (norm < _prevNorm)
+        {
+            _fadingOut = false;
+            _hasSmoothed = false;
+            _riseWeight = 0f;
+        }
         _prevNorm = norm;
 
-        // ·¡Ä¡ ½ÃÁ¡
-        float sampleNorm = Mathf.Clamp01(contactNorm - preContactSampleOffset);
-
-        // Å± À©µµ¿ì°¡ ³¡³ª¸é ·¡Ä¡ ÇØÁ¦
-        if (_latched && norm > (releaseNorm + postWindow))
-            ResetLatch();
-
-        // °ø À§Ä¡ ·¡Ä¡(ÇÑ ¹ø¸¸)
-        if (!_latched && interactor.HasBall && norm >= sampleNorm && norm <= contactNorm)
-        {
-            if (interactor.BallTransform)
-            {
-                _latchedBallPos = interactor.BallTransform.position;
-                _latched = true;
-            }
-        }
-
-        // ====== ¿©±âºÎÅÍ "IK Àû¿ë ÃÖ¼Ò Á¶°Ç"À» °­È­ ======
-        // °øÀ» ¾È µé°í ÀÖ°í, ·¡Ä¡µµ ¾øÀ¸¸é -> IK ¾Æ¿¹ Áß´Ü
-        if (!interactor.HasBall && !_latched)
-        {
-            // ¾ÈÀü: weight 0À¸·Î ¸í½ÃÇØ µÎ¸é ´õ ±ò²û
-            anim.SetIKPositionWeight(kickingFoot, 0f);
-            anim.SetIKRotationWeight(kickingFoot, 0f);
-            return;
-        }
-
-        // º£ÀÌÅ© ¹ß/ÄÁÅÃÆ® À§Ä¡
         Vector3 localFoot = new Vector3(
             footData.curveX.Evaluate(norm),
             footData.curveY.Evaluate(norm),
             footData.curveZ.Evaluate(norm)
         );
         Vector3 baseFoot = transform.TransformPoint(localFoot);
+        _gizmoBaseFoot = baseFoot;
+
+        // ê³µ íƒ€ê¹ƒ(ì—†ìœ¼ë©´ IKë¥¼ ì¼œì§€ ì•Šë„ë¡ 'ê·¼ì ‘ íŒì •'ì—ì„œë§Œ ì‚¬ìš©, targetì€ ê·¸ë˜ë„ ê³„ì‚°)
+        bool hasBallTf = interactor.BallTransform != null;
         Vector3 baseContact = transform.TransformPoint(footData.contactPosition);
+        Vector3 ballPos = hasBallTf ? interactor.BallTransform.position : baseContact;
 
-        // Å¸±ê °ø À§Ä¡(·¡Ä¡ ¿ì¼±)
-        Vector3 ballPosForIK = (_latched && norm >= sampleNorm)
-            ? _latchedBallPos
-            : (interactor.BallTransform ? interactor.BallTransform.position : baseContact);
+        Vector3 rawTarget = ballPos + contactOffset;
+        rawTarget.y = Mathf.Min(rawTarget.y, baseFoot.y + maxAnkleRise);
 
-        Vector3 target = ballPosForIK + contactOffset;
-        Vector3 delta = target - baseContact;
+        float dt = Time.deltaTime;
+        float aSmooth = 1f - Mathf.Exp(-targetSmooth * dt);
+        if (!_hasSmoothed) { _smoothedTarget = rawTarget; _hasSmoothed = true; }
+        else { _smoothedTarget = Vector3.Lerp(_smoothedTarget, rawTarget, aSmooth); }
+        Vector3 target = Vector3.MoveTowards(_smoothedTarget, rawTarget, maxTargetStep);
+        _gizmoTarget = target;
 
-        // --- º¸Á¤·® ¾ÈÀüÀåÄ¡ ---
-        // 1) °úµµÇÑ º¸Á¤·® Å¬·¥ÇÁ(¿¹: 20cm)
-        float maxCorrection = 0.20f;
-        if (delta.magnitude > maxCorrection)
-            delta = delta.normalized * maxCorrection;
-
-        // 2) ¹ß-Å¸±êÀÌ ³Ê¹« ¸Ö¸é weight¸¦ °­Á¦·Î ÁÙÀÌ±â (¿¹: 40cm ÀÌ»óÀÌ¸é °¨¼Ò)
-        float targetDist = Vector3.Distance(baseFoot, target);
-        float farStart = 0.40f, farEnd = 0.60f; // 40~60cm »çÀÌ¿¡¼­ ¼±Çü °¨¼è
-        float farFactor = 1f - Mathf.InverseLerp(farStart, farEnd, targetDist);
-        farFactor = Mathf.Clamp01(farFactor);
-
-        // --- weight °î¼±(È¦µå + ÀÌÁî¾Æ¿ô) ---
-        float w = 0f;
-        const float holdAfterContact = 0.06f;
-        float holdEnd = Mathf.Min(contactNorm + holdAfterContact, releaseNorm);
-
-        if (norm < contactNorm)
+        // ê³µ ê·¼ì ‘ íˆìŠ¤í…Œë¦¬ì‹œìŠ¤ ì—…ë°ì´íŠ¸(ê³µ Transform ì—†ìœ¼ë©´ ê·¼ì ‘ false ìœ ì§€)
+        if (hasBallTf)
         {
-            w = Mathf.InverseLerp(0f, contactNorm, norm) * peakWeight;
-        }
-        else if (norm <= holdEnd)
-        {
-            w = peakWeight;
-        }
-        else if (norm <= releaseNorm)
-        {
-            float t = Mathf.InverseLerp(holdEnd, releaseNorm, norm);
-            t = t * t * (3f - 2f * t); // smoothstep
-            w = Mathf.Lerp(peakWeight, 0f, t);
+            float dist = Vector3.Distance(baseFoot, ballPos);
+            if (!_nearBall && dist <= enableRadius) _nearBall = true;
+            else if (_nearBall && dist >= disableRadius)
+            {
+                _nearBall = false;
+                BeginFadeOut(norm);
+            }
         }
         else
         {
-            w = 0f;
+            if (_nearBall) { _nearBall = false; BeginFadeOut(norm); }
         }
 
-        // ¸Ö¸é °¨¼è
-        w *= farFactor;
+        // HasBall ì „í™˜ ê°ì§€(ì‹¤ì œ í‚¥ ìˆœê°„)
+        bool kickJustHappened = (_hadBallPrev && !interactor.HasBall);
+        _hadBallPrev = interactor.HasBall;
+        if (kickJustHappened) BeginFadeOut(norm);
 
-        // ÃÖÁ¾ º¸Á¤ Àû¿ë
-        Vector3 corrected = baseFoot + delta * w;
+        // weight ê³„ì‚°
+        float w = 0f;
+        if (_nearBall && !_fadingOut)
+        {
+            _riseWeight = Mathf.MoveTowards(_riseWeight, peakWeight, riseSpeed * dt);
+            w = _riseWeight;
+        }
+        else if (_fadingOut)
+        {
+            float denom = Mathf.Max(1e-5f, 1f - _releaseStartNorm);
+            float t = Mathf.Clamp01((norm - _releaseStartNorm) / denom);
+            t = t * t * (3f - 2f * t);
+            w = Mathf.Lerp(peakWeight, 0f, t);
+            _riseWeight = w;
+        }
+        else
+        {
+            // ê³µì´ ë©€ë¦¬ ìˆê±°ë‚˜ ì—†ìŒ â†’ ì¦‰ì‹œ 0ìœ¼ë¡œ ìˆ˜ë ´
+            _riseWeight = Mathf.MoveTowards(_riseWeight, 0f, riseSpeed * dt);
+            w = _riseWeight;
+        }
+
+        // IK ë³´ì •(í”„ë ˆì„ë‹¹ ì´ë™ëŸ‰ ì œí•œ)
+        Vector3 toTarget = target - baseFoot;
+        Vector3 desired = baseFoot + toTarget * w;
+        Vector3 corrected = Vector3.MoveTowards(baseFoot, desired, maxIKStep);
+        _gizmoCorrected = corrected;
+
+        // ê°•ì œ í‚¥: ê·¼ì ‘ ìƒíƒœì—ì„œë§Œ, ì¶©ë¶„í•œ weightì¼ ë•Œë§Œ
+        if (useForcedKick && _nearBall && !_fadingOut && _riseWeight >= minWeightToForce && hasBallTf)
+        {
+            float dist = Vector3.Distance(corrected, ballPos);
+            if (dist <= forceKickDistance && (Time.time - _lastForceTime) >= forceKickCooldown)
+            {
+                onForcedKick?.Invoke();
+                BeginFadeOut(norm);
+                _lastForceTime = Time.time;
+                Debug.Log($"[KickWithCurve] Forced kick at dist {dist:F3}m");
+            }
+        }
 
         anim.SetIKPositionWeight(kickingFoot, w);
         anim.SetIKPosition(kickingFoot, corrected);
         anim.SetIKRotationWeight(kickingFoot, 0f);
-        weightDebug = w;
+
+        if (kneeHint)
+        {
+            var hintType = (kickingFoot == AvatarIKGoal.RightFoot) ? AvatarIKHint.RightKnee : AvatarIKHint.LeftKnee;
+            anim.SetIKHintPositionWeight(hintType, w);
+            anim.SetIKHintPosition(hintType, kneeHint.position);
+        }
     }
 
-    void ResetLatch()
+    void BeginFadeOut(float normNow)
     {
-        _latched = false;
-        _unlatchAt = -1f;
-        _prevNorm = 0f;
+        _fadingOut = true;
+        _releaseStartNorm = normNow;
     }
 
-    void OnDisable() => ResetLatch();
+    void ResetAll()
+    {
+        _fadingOut = false;
+        _hadBallPrev = false;
+        _hasSmoothed = false;
+        _prevNorm = 0f;
+        _riseWeight = 0f;
+        _nearBall = false;
 
-    private void OnDrawGizmos()
+        anim.SetIKPositionWeight(kickingFoot, 0f);
+        anim.SetIKRotationWeight(kickingFoot, 0f);
+    }
+
+    void OnDisable() => ResetAll();
+
+    void OnDrawGizmos()
     {
         if (!drawDebug || footData == null) return;
 
         Gizmos.color = curveColor;
-        int steps = 20;
+        int steps = Mathf.Max(4, curveSteps);
         Vector3 prev = Vector3.zero;
         bool hasPrev = false;
-
         for (int i = 0; i <= steps; i++)
         {
             float t = i / (float)steps;
@@ -181,20 +220,19 @@ public class KickWithCurve : MonoBehaviour
                 footData.curveZ.Evaluate(t)
             );
             Vector3 worldP = transform.TransformPoint(localP);
-
             Gizmos.DrawSphere(worldP, 0.01f);
             if (hasPrev) Gizmos.DrawLine(prev, worldP);
-
-            prev = worldP;
-            hasPrev = true;
+            prev = worldP; hasPrev = true;
         }
 
-        if (interactor != null && interactor.BallTransform != null)
+        if (Application.isPlaying)
         {
             Gizmos.color = targetColor;
-            // ÇöÀç ÇÁ·¹ÀÓ¿¡ IK°¡ ÂüÁ¶ÇÏ´Â ÁÂÇ¥¸¦ ½Ã°¢È­(·¡Ä¡ ¿©ºÎ ¹İ¿µ)
-            // ½ÇÇà Áß¿£ OnDrawGizmos ½ÃÁ¡¿¡ ·¡Ä¡ Á¤º¸°¡ ¾øÀ» ¼ö ÀÖ¾î ´Ü¼øÈ÷ ÇöÀç °ø À§Ä¡¸¦ ±×¸²
-            Gizmos.DrawSphere(interactor.BallTransform.position + contactOffset, 0.05f);
+            Gizmos.DrawSphere(_gizmoTarget, 0.04f);
+
+            Gizmos.color = correctedColor;
+            Gizmos.DrawSphere(_gizmoCorrected, 0.03f);
+            Gizmos.DrawLine(_gizmoBaseFoot, _gizmoCorrected);
         }
     }
 }

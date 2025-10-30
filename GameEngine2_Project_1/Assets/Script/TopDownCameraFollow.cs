@@ -29,6 +29,6 @@ public class TopDownCameraFollow : MonoBehaviour
         transform.position = Vector3.SmoothDamp(transform.position, desiredPosition, ref velocity, smoothTime);
 
         // X축을 70도로 고정, 나머지는 그대로
-        transform.rotation = Quaternion.Euler(70f, 0f, 0f);
+        transform.rotation = Quaternion.Euler(0f, 0f, 0f);
     }
 }

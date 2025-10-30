@@ -27,7 +27,7 @@ public class Ball : MonoBehaviour
 
     // 타깃 속도에 따른 z 오프셋 동적 적용
     [Header("Assist Dynamic Z")]
-    public float baseOffsetZ = 0.5f;
+    public float baseOffsetZ = 0.2f;
     public float speedToOffset = 0.12f;       // (m / (m/s)) : 속도 1m/s 당 추가 앞거리
     public float minOffsetZ = 0.40f;
     public float maxOffsetZ = 1.00f;
@@ -57,6 +57,18 @@ public class Ball : MonoBehaviour
     public float followStartSpeed = 0.6f;   // 이 이상 속도면 따라가기 재개
     bool _followSuppressed = false;
     Vector3 _idleHoldPos;
+
+    // ===== Debug =====
+    [Header("Debug")]
+    public bool debugOffsets = false;
+    public float debugEvery = 0.20f;   // 초
+    float _nextDbgTime = 0f;
+
+    // 디버그용 캐시값 (Gizmos)
+    Vector3 _dbgTargetWorld;    // 목표 위치(assist/legacy에 따라)
+    Vector3 _dbgDesiredWorld;   // 계산된 이상적 목표(예: PD targetPos)
+    Vector3 _dbgOffsetWorld;    // Owner 기준 로컬 오프셋의 월드 결과
+    bool _dbgValid = false;
 
     void Awake()
     {
@@ -104,6 +116,11 @@ public class Ball : MonoBehaviour
             _ownerCC = Owner.GetComponent<CharacterController>();
             _followSuppressed = false;
         }
+
+        if (debugOffsets)
+        {
+            Debug.Log($"[Ball] SetOwner: owner={(Owner ? Owner.name : "null")}, usePhysicsFollowWhenOwned={usePhysicsFollowWhenOwned}, kinematic={rb.isKinematic}");
+        }
     }
 
     public void Release()
@@ -115,6 +132,11 @@ public class Ball : MonoBehaviour
         OnPossessionChanged?.Invoke(null);
         _ownerCC = null;
         _followSuppressed = false;
+
+        if (debugOffsets)
+        {
+            Debug.Log("[Ball] Release: owner cleared, assist disabled");
+        }
     }
 
     // ---- Assist API ----
@@ -131,24 +153,32 @@ public class Ball : MonoBehaviour
             _ownerCC = assistTarget.GetComponent<CharacterController>();
 
         assistEnabled = true;
+
+        if (debugOffsets)
+        {
+            Debug.Log($"[Ball] EnableAssist: target={assistTarget.name}, localOffset={assistLocalOffset}, baseOffsetZ={baseOffsetZ}, speedToOffset={speedToOffset}");
+        }
     }
 
     public void DisableAssist()
     {
         assistEnabled = false;
         assistTarget = null;
+        if (debugOffsets) Debug.Log("[Ball] DisableAssist");
     }
 
     void FixedUpdate()
     {
+        _dbgValid = false;
+
         // 소유 중
         if (Owner != null)
         {
             // 공통: 오너 수평 속도 + 히스테리시스 토글
             Vector3 ccVel = (_ownerCC != null) ? _ownerCC.velocity : Vector3.zero;
             float planarSpeed = new Vector3(ccVel.x, 0f, ccVel.z).magnitude;
-            //Debug.Log($"Ball FixedUpdate - planarSpeed: {planarSpeed}");
 
+            bool prevSuppressed = _followSuppressed;
             if (_followSuppressed)
             {
                 if (planarSpeed > followStartSpeed)
@@ -164,6 +194,10 @@ public class Ball : MonoBehaviour
                     rb.angularVelocity = Vector3.zero;
                 }
             }
+            if (debugOffsets && prevSuppressed != _followSuppressed)
+            {
+                Debug.Log($"[Ball] Suppress toggle: {_followSuppressed} (planarSpeed={planarSpeed:F2})");
+            }
 
             // PD Assist 모드
             if (usePhysicsFollowWhenOwned && assistEnabled && assistTarget && !rb.isKinematic)
@@ -173,6 +207,13 @@ public class Ball : MonoBehaviour
                     rb.linearVelocity = Vector3.zero;
                     rb.angularVelocity = Vector3.zero;
                     rb.MovePosition(new Vector3(_idleHoldPos.x, rb.position.y, _idleHoldPos.z));
+
+                    _dbgTargetWorld = _idleHoldPos;
+                    _dbgDesiredWorld = _idleHoldPos;
+                    _dbgOffsetWorld = _idleHoldPos;
+                    _dbgValid = true;
+
+                    TryLogPD(planarSpeed, Vector3.zero, Vector3.zero, _idleHoldPos, _idleHoldPos, true);
                     return;
                 }
 
@@ -213,6 +254,13 @@ public class Ball : MonoBehaviour
                     rb.linearVelocity = Vector3.zero;
                     rb.angularVelocity = Vector3.zero;
                     rb.MovePosition(new Vector3(targetPos.x, rb.position.y, targetPos.z));
+
+                    _dbgTargetWorld = new Vector3(targetPos.x, rb.position.y, targetPos.z);
+                    _dbgDesiredWorld = targetPos;
+                    _dbgOffsetWorld = assistTarget.TransformPoint(assistLocalOffset);
+                    _dbgValid = true;
+
+                    TryLogPD(planarSpeed, _smoothedTargetVel, flatErr, targetPos, _dbgTargetWorld, false);
                     return;
                 }
 
@@ -230,6 +278,13 @@ public class Ball : MonoBehaviour
                 rb.AddForce(accel, ForceMode.Acceleration);
 
                 rb.angularVelocity = Vector3.zero;
+
+                _dbgTargetWorld = assistTarget.TransformPoint(new Vector3(assistLocalOffset.x, assistLocalOffset.y, _currentOffsetZ));
+                _dbgDesiredWorld = assistTarget.TransformPoint(dynOffset);
+                _dbgOffsetWorld = _dbgTargetWorld;
+                _dbgValid = true;
+
+                TryLogPD(planarSpeed, _smoothedTargetVel, flatErr, _dbgDesiredWorld, _dbgTargetWorld, false);
             }
             else
             {
@@ -239,6 +294,13 @@ public class Ball : MonoBehaviour
                     rb.linearVelocity = Vector3.zero;
                     rb.angularVelocity = Vector3.zero;
                     rb.MovePosition(new Vector3(_idleHoldPos.x, rb.position.y, _idleHoldPos.z));
+
+                    _dbgTargetWorld = _idleHoldPos;
+                    _dbgDesiredWorld = _idleHoldPos;
+                    _dbgOffsetWorld = _idleHoldPos;
+                    _dbgValid = true;
+
+                    TryLogLegacy(planarSpeed, 0f, _idleHoldPos);
                     return;
                 }
 
@@ -255,6 +317,13 @@ public class Ball : MonoBehaviour
                     rb.linearVelocity = Vector3.zero;
                     rb.angularVelocity = Vector3.zero;
                     rb.MovePosition(new Vector3(targetWorld.x, rb.position.y, targetWorld.z));
+
+                    _dbgTargetWorld = targetWorld;
+                    _dbgDesiredWorld = targetWorld;
+                    _dbgOffsetWorld = targetWorld;
+                    _dbgValid = true;
+
+                    TryLogLegacy(spd, baseZ, targetWorld);
                 }
                 else
                 {
@@ -267,6 +336,13 @@ public class Ball : MonoBehaviour
 
                     rb.angularVelocity = Vector3.zero;
                     rb.MovePosition(new Vector3(targetWorld.x, rb.position.y, targetWorld.z));
+
+                    _dbgTargetWorld = targetWorld;
+                    _dbgDesiredWorld = targetWorld;
+                    _dbgOffsetWorld = targetWorld;
+                    _dbgValid = true;
+
+                    TryLogLegacy(spd, _curZ, targetWorld);
                 }
             }
             return;
@@ -284,5 +360,59 @@ public class Ball : MonoBehaviour
         {
             rb.angularVelocity = Vector3.zero;
         }
+    }
+
+    // ===== Debug Helpers =====
+    void TryLogPD(float planarSpeed, Vector3 smVel, Vector3 flatErr, Vector3 desiredTarget, Vector3 snapTarget, bool holding)
+    {
+        if (!debugOffsets || Time.time < _nextDbgTime) return;
+        _nextDbgTime = Time.time + debugEvery;
+
+        string holdStr = holding ? "HOLD" : "FOLLOW";
+        Debug.Log(
+            $"[Ball/PD-{holdStr}] owner={(Owner ? Owner.name : "null")}, assist={assistEnabled}, " +
+            $"localOffset={assistLocalOffset}, baseOffsetZ={baseOffsetZ:F2}, curZ={_currentOffsetZ:F2}, " +
+            $"speedToOffset={speedToOffset:F2}, planarSpeed={planarSpeed:F2}, smVel=({smVel.x:F2},{smVel.z:F2}), " +
+            $"flatErr=({flatErr.x:F2},{flatErr.z:F2})m, desiredTarget=({desiredTarget.x:F2},{desiredTarget.z:F2}), " +
+            $"snapTarget=({snapTarget.x:F2},{snapTarget.z:F2}), K={assistK:F1}, D={(assistD <= 0f ? -1f : assistD):F1}"
+        );
+    }
+
+    void TryLogLegacy(float speed, float curZOrBaseZ, Vector3 targetWorld)
+    {
+        if (!debugOffsets || Time.time < _nextDbgTime) return;
+        _nextDbgTime = Time.time + debugEvery;
+
+        Debug.Log(
+            $"[Ball/Legacy] owner={(Owner ? Owner.name : "null")}, rightX={rightX:F2}, baseZ={baseZ:F2}, " +
+            $"speedToZ={speedToZ:F2}, curZ={curZOrBaseZ:F2}, speed={speed:F2}, target=({targetWorld.x:F2},{targetWorld.z:F2})"
+        );
+    }
+
+    void OnDrawGizmosSelected()
+    {
+        if (!_dbgValid || Owner == null) return;
+
+        // 타깃 지점
+        Gizmos.color = Color.cyan;
+        Gizmos.DrawWireSphere(_dbgTargetWorld, 0.06f);
+
+        // 이상적 목표(특히 PD에서 dynOffset 적용된 위치)
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawWireSphere(_dbgDesiredWorld, 0.05f);
+
+        // Owner 기준 로컬 오프셋 결과 위치
+        Gizmos.color = Color.magenta;
+        Gizmos.DrawWireSphere(_dbgOffsetWorld, 0.05f);
+
+        // 선으로 관계 표시
+        Gizmos.color = Color.white;
+        Gizmos.DrawLine(transform.position, _dbgTargetWorld);   // 공 → 타깃
+
+        Gizmos.color = new Color(0.2f, 1f, 0.2f, 1f);
+        Gizmos.DrawLine(Owner.position, _dbgTargetWorld);       // Owner → 타깃
+
+        Gizmos.color = new Color(1f, 0.5f, 0f, 1f);
+        Gizmos.DrawLine(_dbgOffsetWorld, _dbgDesiredWorld);     // 오프셋 결과 ↔ 이상적 목표
     }
 }

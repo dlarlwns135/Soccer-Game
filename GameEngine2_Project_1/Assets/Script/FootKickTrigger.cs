@@ -6,9 +6,16 @@ public class FootKickTrigger : MonoBehaviour
     public LayerMask ballLayer;
     public float rehitDelay = 0.10f;
 
-    [Header("Animator Tag Gate")]
-    public Animator animator;   // 비워두면 부모에서 탐색
-    public string requiredTag = "Action";   // 태그가 Action일 때만 발동
+    [Header("Animator Gate")]
+    public Animator animator;              // 비우면 부모에서 탐색
+    public int animLayer = 0;              // 킥이 재생되는 레이어
+    public string requiredTag = "Action";  // 해당 태그 상태에서만
+    [Range(0, 1)] public float windowStart = 0.25f;
+    [Range(0, 1)] public float windowEnd = 0.45f;
+
+    [Header("Options")]
+    public bool allowOtherIsTrigger = false;
+    public bool verboseLog = true;
 
     float lastTime;
 
@@ -17,57 +24,70 @@ public class FootKickTrigger : MonoBehaviour
         owner = GetComponentInParent<PlayerBallInteractor>();
         animator = GetComponentInParent<Animator>();
     }
-
     void Awake()
     {
         if (!owner) owner = GetComponentInParent<PlayerBallInteractor>();
         if (!animator) animator = GetComponentInParent<Animator>();
-        Debug.Log($"[FootKickTrigger] Awake: owner={owner}, animator={animator}");
+        if (verboseLog)
+            Debug.Log($"[FootKickTrigger:{name}] Awake owner={owner?.name}, animator={animator?.name}, myCollider.isTrigger={GetComponent<Collider>()?.isTrigger}");
     }
 
     void OnTriggerEnter(Collider other)
     {
-        if (!PassesAnimationGate())
+        if (verboseLog)
+            Debug.Log($"[FootKickTrigger:{name}] OnTriggerEnter {other.name} | layer={other.gameObject.layer} | tag={other.tag} | isTrigger={other.isTrigger} | rb={(other.attachedRigidbody ? other.attachedRigidbody.name : "null")}");
+
+        if (!owner) { Warn("Blocked: owner null"); return; }
+        if (other.isTrigger && !allowOtherIsTrigger) { Warn("Blocked: other.isTrigger"); return; }
+
+        // 1) 애니메이션 게이트
+        if (!PassesAnimationGate(out float norm, out bool inTrans, out bool hasTag))
         {
-            Debug.Log("[FootKickTrigger] Gate blocked: not Action state or too early in clip");
+            Warn($"Gate blocked: hasTag={hasTag}, inTransition={inTrans}, norm={norm:0.000}, layer={animLayer}");
             return;
         }
 
-        // 레이어 필터
+        // 2) 레이어 필터
         if ((ballLayer.value & (1 << other.gameObject.layer)) == 0)
+        {
+            Warn($"Blocked: layer mismatch. mask={System.Convert.ToString(ballLayer.value, 2)} other={other.gameObject.layer}");
             return;
+        }
 
-        // Ball 컴포넌트 확인
+        // 3) Ball 컴포넌트
         Ball ball = other.attachedRigidbody ? other.attachedRigidbody.GetComponent<Ball>()
                                             : other.GetComponent<Ball>();
-        if (!ball) return;
+        if (!ball) { Warn("Blocked: Ball component not found"); return; }
 
-        // 연속 트리거 방지
-        if (Time.time - lastTime < rehitDelay) return;
+        // 4) 쿨다운
+        float dt = Time.time - lastTime;
+        if (dt < rehitDelay) { Warn($"Blocked: cooldown {dt:0.000}/{rehitDelay:0.000}"); return; }
+
         lastTime = Time.time;
-
-        if (owner)
-        {
-            Debug.Log("[FootKickTrigger] Kick!");
-            owner.TriggerKickFromFoot();
-        }
-        else
-        {
-            Debug.LogWarning("[FootKickTrigger] owner missing");
-        }
+        if (verboseLog) Debug.Log($"[FootKickTrigger:{name}] Kick! norm={norm:0.000} layer={animLayer}");
+        owner.TriggerKickFromFoot();
     }
 
-    bool PassesAnimationGate()
+    bool PassesAnimationGate(out float norm, out bool inTransition, out bool hasTag)
     {
+        norm = 0f; inTransition = false; hasTag = false;
         if (!animator) return false;
 
-        // 전이 중이면 무시
-        if (animator.IsInTransition(0)) return false;
+        inTransition = animator.IsInTransition(animLayer);
+        if (inTransition) return false;
 
-        // Base Layer 상태 가져오기
-        var info = animator.GetCurrentAnimatorStateInfo(0);
+        var info = animator.GetCurrentAnimatorStateInfo(animLayer);
+        norm = info.normalizedTime % 1f;
+        hasTag = string.IsNullOrEmpty(requiredTag) || info.IsTag(requiredTag);
 
-        // 상태 태그가 Action이고, 진행도가 0.1 이상일 때만 허용
-        return info.IsTag(requiredTag) && info.normalizedTime >= 0.1f;
+        bool inWindow = (norm >= windowStart && norm <= windowEnd);
+        if (verboseLog)
+            Debug.Log($"[FootKickTrigger:{name}] GateCheck: hasTag={hasTag}, norm={norm:0.000}, stateHash={info.fullPathHash}, loop={Mathf.FloorToInt(info.normalizedTime)}, inWindow={inWindow}, layer={animLayer}");
+        return hasTag && inWindow;
+    }
+
+    void Warn(string msg)
+    {
+        if (verboseLog) Debug.LogWarning($"[FootKickTrigger:{name}] {msg}");
     }
 }

@@ -1,57 +1,85 @@
 using UnityEngine;
+using System.Linq;
 
 [RequireComponent(typeof(Animator))]
 public class PlayerBallInteractor : MonoBehaviour
 {
     [Header("Refs")]
-    public Ball ball;                
-    public Transform foot;           
+    public Ball ball;
+    public Transform foot;
 
     public bool HasBall => ball && ball.Owner == transform;
     public Transform BallTransform => ball ? ball.transform : null;
 
     [Header("Distances")]
-    public float pickUpRadius = 0.7f; // 공이 자유일 때 소유
-    public float stealRadius = 0.6f; // 남이 들고 있을 때 뺏기
+    public float pickUpRadius = 0.7f;
+    public float stealRadius = 0.6f;
 
     [Header("Tuning")]
-    public float stealCooldown = 0.25f;  // 연속 뺏기 방지
-    public LayerMask obstructionMask = 0; // 선택: 사이에 벽/장애물 있으면 차단
+    public float stealCooldown = 0.25f;
+    public LayerMask obstructionMask = 0;
 
     [Header("Pickup/Kick Control")]
-    public float pickupBlockAfterKick = 0.25f; // 킥 후 이 시간 동안은 줍기 금지
+    public float pickupBlockAfterKick = 0.25f;
     float pickupBlockedUntil = -1f;
 
     Animator anim;
     float lastStealTime = -999f;
 
+    // 캐시
+    Collider[] playerSolidCols;   // isTrigger == false 만
+    Collider[] ballSolidCols;     // isTrigger == false 만
+
     void Awake()
     {
         anim = GetComponent<Animator>();
-        if (!foot) foot = transform; // 없으면 본체 기준
+        if (!foot) foot = transform;
         if (!ball) ball = FindObjectOfType<Ball>(true);
+
+        CacheColliders();
     }
 
     void OnEnable()
     {
         if (ball) ball.OnPossessionChanged += OnBallOwnerChanged;
     }
+
     void OnDisable()
     {
         if (ball) ball.OnPossessionChanged -= OnBallOwnerChanged;
+        // 안전 복구
+        TogglePlayerBallCollision(false);
+    }
+
+    void CacheColliders()
+    {
+        // 플레이어: 자식 포함, 트리거 제외
+        playerSolidCols = GetComponentsInChildren<Collider>(true)
+            .Where(c => c && c.enabled && !c.isTrigger)
+            .ToArray();
+
+        // 공: 자식 포함, 트리거 제외
+        ballSolidCols = ball
+            ? ball.GetComponentsInChildren<Collider>(true)
+                  .Where(c => c && c.enabled && !c.isTrigger)
+                  .ToArray()
+            : new Collider[0];
     }
 
     void FixedUpdate()
     {
         if (!ball) return;
 
+        // 혹시 런타임에 콜라이더 구성/활성 상태가 바뀌면 필요 시 다시 캐시
+        // (부하를 줄이려면 조건부로만 호출)
+        if (playerSolidCols == null || ballSolidCols == null) CacheColliders();
+
         Vector3 bp = ball.transform.position;
         float distSqr = (bp - foot.position).sqrMagnitude;
 
-        // 1) 공이 자유면: 주워오기 (쿨다운 체크 추가!)
         if (ball.IsFree)
         {
-            if (Time.time >= pickupBlockedUntil &&               // 추가
+            if (Time.time >= pickupBlockedUntil &&
                 distSqr <= pickUpRadius * pickUpRadius &&
                 NotObstructed(bp))
             {
@@ -59,11 +87,11 @@ public class PlayerBallInteractor : MonoBehaviour
                 return;
             }
         }
-        // 2) 소유자가 있는데 내가 뺏을 수 있나?
         else if (ball.Owner != transform)
         {
             if (Time.time - lastStealTime >= stealCooldown &&
-                distSqr <= stealRadius * stealRadius && NotObstructed(bp))
+                distSqr <= stealRadius * stealRadius &&
+                NotObstructed(bp))
             {
                 ball.SetOwner(transform);
                 lastStealTime = Time.time;
@@ -71,27 +99,39 @@ public class PlayerBallInteractor : MonoBehaviour
         }
     }
 
-    void OnKickContact()
-    {
-        if (HasBall && ball != null)
-        {
-            pickupBlockedUntil = Time.time + pickupBlockAfterKick;
-
-            // 킥 직전엔 보조를 끄고 자유공으로
-            ball.DisableAssist();
-
-            Vector3 dir = (transform.forward
-                       + Vector3.up * 0.5f
-                       - transform.right * 0.1f).normalized;
-            float impulse = 18f;
-            ball.Kick(dir, impulse);
-        }
-    }
-
+    // 트리거(발)에서 호출: 레이스 해소용 빠른 소유 + 킥
     public void TriggerKickFromFoot()
     {
-        Debug.Log("TriggerKickFromFoot called");
-        OnKickContact(); // 내부 로직 그대로 사용
+        if (ball == null) { Debug.LogWarning("[Interactor] no ball"); return; }
+
+        if (HasBall) { OnKickContact(); return; }
+
+        Vector3 me = foot ? foot.position : transform.position;
+        float dist = Vector3.Distance(ball.transform.position, me);
+
+        if (ball.IsFree && dist <= pickUpRadius * 1.1f && NotObstructed(ball.transform.position))
+        {
+            ball.SetOwner(transform);
+            OnKickContact();
+            return;
+        }
+
+        Debug.LogWarning("[Interactor] TriggerKickFromFoot ignored: not owner and not in pickup range");
+    }
+
+    void OnKickContact()
+    {
+        if (!ball) { Debug.LogWarning("[Interactor] Kick: no ball"); return; }
+        if (!HasBall) { Debug.LogWarning("[Interactor] Kick blocked: not owner"); return; }
+
+        pickupBlockedUntil = Time.time + pickupBlockAfterKick;
+
+        ball.DisableAssist();
+
+        Vector3 dir = (transform.forward + Vector3.up * 0.5f - transform.right * 0.1f).normalized;
+        float impulse = 18f;
+        Debug.Log($"[Interactor] Kick impulse={impulse}");
+        ball.Kick(dir, impulse);
     }
 
     bool NotObstructed(Vector3 ballPos)
@@ -104,24 +144,45 @@ public class PlayerBallInteractor : MonoBehaviour
 
     void OnBallOwnerChanged(Transform owner)
     {
+        // 콜라이더 캐시 최신화
+        CacheColliders();
+
         if (anim)
         {
             int hHasBall = Animator.StringToHash("HasBall");
             if (hHasBall != 0) anim.SetBool(hHasBall, owner == transform);
         }
-
         if (ball == null) return;
 
         if (owner == transform)
         {
-            // 내 앞(오른쪽 0.0, 위 0.0, 앞 0.5~0.7m 등)으로 보조
+            // 소유 시작: 본체(비-트리거) ↔ 공(비-트리거) 충돌 무시
+            TogglePlayerBallCollision(true);
+
             Vector3 localOffset = new Vector3(0.2f, 0.0f, 0.5f);
             ball.EnableAssist(transform, localOffset);
         }
         else
         {
+            // 소유 해제: 충돌 복구
+            TogglePlayerBallCollision(false);
             ball.DisableAssist();
         }
     }
 
+    void TogglePlayerBallCollision(bool ignore)
+    {
+        if (playerSolidCols == null || ballSolidCols == null) return;
+
+        foreach (var pc in playerSolidCols)
+        {
+            if (!pc) continue;
+            foreach (var bc in ballSolidCols)
+            {
+                if (!bc) continue;
+                // 트리거는 애초에 캐시에서 제외되어 있음
+                Physics.IgnoreCollision(pc, bc, ignore);
+            }
+        }
+    }
 }

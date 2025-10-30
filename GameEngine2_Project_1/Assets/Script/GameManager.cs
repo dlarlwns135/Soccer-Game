@@ -28,6 +28,19 @@ public class GameManager : MonoBehaviour
             ball.ResetPosition(ballSpawnPoint.position);
     }
 
+    void Update()
+    {
+        // Q 키를 누르면 공 리셋
+        if (Input.GetKeyDown(KeyCode.Q))
+        {
+            if (ball != null && ballSpawnPoint != null)
+            {
+                ball.ResetPosition(ballSpawnPoint.position);
+                Debug.Log("Ball reset manually by Q key");
+            }
+        }
+    }
+
     // ====== 외부에서 호출 ======
     public void OnBallOutOfPlay(Ball b, Vector3 at)
     {
@@ -50,7 +63,6 @@ public class GameManager : MonoBehaviour
 
     IEnumerator RestartRoutine(string reason, float delay)
     {
-        // 일시 정지 연출을 원하면 여기서 공 속도 0, 플레이 중지 등
         yield return new WaitForSeconds(delay);
 
         if (ballSpawnPoint != null && ball != null)
@@ -64,7 +76,7 @@ public class GameManager : MonoBehaviour
     public void OnGoal()
     {
         Debug.Log("Goal! (manual)");
-        if (ballSpawnPoint != null)
+        if (ballSpawnPoint != null && ball != null)
             ball.ResetPosition(ballSpawnPoint.position);
     }
 }
