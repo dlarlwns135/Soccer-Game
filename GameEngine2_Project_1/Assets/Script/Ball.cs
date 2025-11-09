@@ -1,5 +1,6 @@
 using UnityEngine;
 using System;
+using System.Collections.Generic;
 
 [RequireComponent(typeof(Rigidbody))]
 public class Ball : MonoBehaviour
@@ -70,16 +71,53 @@ public class Ball : MonoBehaviour
     Vector3 _dbgOffsetWorld;    // Owner 기준 로컬 오프셋의 월드 결과
     bool _dbgValid = false;
 
+    [Header("FX")]
+    [SerializeField] Transform fxRoot;                 // 빈 오브젝트(자식에 파티클 4개가 달려있음)
+    List<ParticleSystem> fxList = new List<ParticleSystem>();
+
     void Awake()
     {
         rb = GetComponent<Rigidbody>();
         rb.maxAngularVelocity = 50f;
+        CacheFx();
+    }
+
+    void CacheFx()
+    {
+        fxList.Clear();
+        if (!fxRoot) return;
+        fxList.AddRange(fxRoot.GetComponentsInChildren<ParticleSystem>(true));
+    }
+
+    void PlayKickFX(Vector3 pos, Vector3 dir)
+    {
+        if (fxList == null || fxList.Count == 0) return;
+
+        // 방향 없으면 현재 전방 사용
+        Vector3 fwd = (dir.sqrMagnitude > 1e-6f) ? dir.normalized : transform.forward;
+        Quaternion rot = Quaternion.LookRotation(fwd, Vector3.up);
+
+        foreach (var ps in fxList)
+        {
+            if (!ps) continue;
+
+            // 파티클 위치/회전 동기화
+            var t = ps.transform;
+            t.position = pos;
+            t.rotation = rot;
+
+            // 잔여 입자 제거 후 재생
+            ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            ps.Clear(true);
+            ps.Play(true);
+        }
     }
 
     public void Kick(Vector3 direction, float force)
     {
         Release();
         rb.AddForce(direction.normalized * force, ForceMode.Impulse);
+        PlayKickFX(transform.position, direction);
     }
 
     public Vector3 GetPosition() => transform.position;
