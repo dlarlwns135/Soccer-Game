@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.VFX;
 
 [RequireComponent(typeof(Animator))]
 public class PlayerAnimatorInput : MonoBehaviour
@@ -18,6 +19,9 @@ public class PlayerAnimatorInput : MonoBehaviour
     [Header("Rotate Lock")]
     [SerializeField] string actionTag = "Action";
     int hTagAction;
+
+    [Header("VFX")]
+    [SerializeField] private VisualEffect shootVFX;  
 
     Animator anim;
     int hSpeed, hMoveX, hMoveY, hIsStrafe, hIsMoving, hIsSprinting, hShootType, hDoShoot;
@@ -39,6 +43,7 @@ public class PlayerAnimatorInput : MonoBehaviour
         hDoShoot = Animator.StringToHash("DoShoot");
 
         hTagAction = Animator.StringToHash(actionTag);
+        shootVFX.Stop();
     }
 
     void Update()
@@ -97,6 +102,7 @@ public class PlayerAnimatorInput : MonoBehaviour
             anim.SetInteger(hShootType, shootType);
             anim.SetTrigger(hDoShoot);
             isShooting = true;
+            OnKickStart_VFX();
         }
 
         // 6) 회전: C가 꺼져있을 때만 입력 방향을 바라보게
@@ -128,5 +134,21 @@ public class PlayerAnimatorInput : MonoBehaviour
     public void OnShootEnd()
     {
         isShooting = false;
+        OnKickEnd_VFX();
+    }
+
+    public void OnKickStart_VFX()
+    {
+        if (shootVFX == null) return;
+        // 생성 시작
+        shootVFX.Play();
+    }
+
+    // 애니메이션 이벤트: 킥 모션 종료 프레임에 호출
+    public void OnKickEnd_VFX()
+    {
+        if (shootVFX == null) return;
+        // 생성만 중지(기존 파티클은 자연 소멸)
+        shootVFX.Stop();          // Reinit() 호출하지 않기
     }
 }
