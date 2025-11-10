@@ -43,7 +43,7 @@ public class PlayerAnimatorInput : MonoBehaviour
         hDoShoot = Animator.StringToHash("DoShoot");
 
         hTagAction = Animator.StringToHash(actionTag);
-        shootVFX.Stop();
+        //shootVFX.Stop();
     }
 
     void Update()
@@ -73,7 +73,8 @@ public class PlayerAnimatorInput : MonoBehaviour
         bool isMoving = speed01 > 0.02f;
 
         bool isStrafe = Input.GetKey(KeyCode.C);
-        anim.SetBool(hIsStrafe, isStrafe);
+        if (!isShooting)
+            anim.SetBool(hIsStrafe, isStrafe);
         anim.SetBool(hIsSprinting, Input.GetKey(KeyCode.E));
 
         // --- 핵심: C 눌림 + 이동 중이면 월드 입력을 현재 바라보는 방향 기준 로컬로 회전 ---
@@ -133,8 +134,11 @@ public class PlayerAnimatorInput : MonoBehaviour
 
     public void OnShootEnd()
     {
-        isShooting = false;
-        OnKickEnd_VFX();
+        if (isShooting)
+        {
+            isShooting = false;
+            OnKickEnd_VFX();
+        }
     }
 
     public void OnKickStart_VFX()
