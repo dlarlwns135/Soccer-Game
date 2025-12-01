@@ -34,23 +34,23 @@ public class FootKickTrigger : MonoBehaviour
 
     void OnTriggerEnter(Collider other)
     {
-        if (verboseLog)
-            Debug.Log($"[FootKickTrigger:{name}] OnTriggerEnter {other.name} | layer={other.gameObject.layer} | tag={other.tag} | isTrigger={other.isTrigger} | rb={(other.attachedRigidbody ? other.attachedRigidbody.name : "null")}");
+        //if (verboseLog)
+            //Debug.Log($"[FootKickTrigger:{name}] OnTriggerEnter {other.name} | layer={other.gameObject.layer} | tag={other.tag} | isTrigger={other.isTrigger} | rb={(other.attachedRigidbody ? other.attachedRigidbody.name : "null")}");
 
         if (!owner) { Warn("Blocked: owner null"); return; }
         if (other.isTrigger && !allowOtherIsTrigger) { Warn("Blocked: other.isTrigger"); return; }
 
-        // 1) 애니메이션 게이트
-        if (!PassesAnimationGate(out float norm, out bool inTrans, out bool hasTag))
-        {
-            Warn($"Gate blocked: hasTag={hasTag}, inTransition={inTrans}, norm={norm:0.000}, layer={animLayer}");
-            return;
-        }
-
-        // 2) 레이어 필터
+        // 1) 레이어 필터
         if ((ballLayer.value & (1 << other.gameObject.layer)) == 0)
         {
             Warn($"Blocked: layer mismatch. mask={System.Convert.ToString(ballLayer.value, 2)} other={other.gameObject.layer}");
+            return;
+        }
+
+        // 2) 애니메이션 게이트
+        if (!PassesAnimationGate(out float norm, out bool inTrans, out bool hasTag))
+        {
+            Warn($"Gate blocked: hasTag={hasTag}, inTransition={inTrans}, norm={norm:0.000}, layer={animLayer}");
             return;
         }
 
@@ -81,13 +81,13 @@ public class FootKickTrigger : MonoBehaviour
         hasTag = string.IsNullOrEmpty(requiredTag) || info.IsTag(requiredTag);
 
         bool inWindow = (norm >= windowStart && norm <= windowEnd);
-        if (verboseLog)
-            Debug.Log($"[FootKickTrigger:{name}] GateCheck: hasTag={hasTag}, norm={norm:0.000}, stateHash={info.fullPathHash}, loop={Mathf.FloorToInt(info.normalizedTime)}, inWindow={inWindow}, layer={animLayer}");
+       // if (verboseLog)
+            //Debug.Log($"[FootKickTrigger:{name}] GateCheck: hasTag={hasTag}, norm={norm:0.000}, stateHash={info.fullPathHash}, loop={Mathf.FloorToInt(info.normalizedTime)}, inWindow={inWindow}, layer={animLayer}");
         return hasTag && inWindow;
     }
 
     void Warn(string msg)
     {
-        if (verboseLog) Debug.LogWarning($"[FootKickTrigger:{name}] {msg}");
+        //if (verboseLog) Debug.LogWarning($"[FootKickTrigger:{name}] {msg}");
     }
 }

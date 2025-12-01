@@ -510,17 +510,17 @@ public class Ball : MonoBehaviour
     // ===== Debug Helpers =====
     void TryLogPD(float planarSpeed, Vector3 smVel, Vector3 flatErr, Vector3 desiredTarget, Vector3 snapTarget, bool holding)
     {
-        if (!debugOffsets || Time.time < _nextDbgTime) return;
-        _nextDbgTime = Time.time + debugEvery;
+        //if (!debugOffsets || Time.time < _nextDbgTime) return;
+        //_nextDbgTime = Time.time + debugEvery;
 
-        string holdStr = holding ? "HOLD" : "FOLLOW";
-        Debug.Log(
-            $"[Ball/PD-{holdStr}] owner={(Owner ? Owner.name : "null")}, assist={assistEnabled}, " +
-            $"localOffset={assistLocalOffset}, baseOffsetZ={baseOffsetZ:F2}, curZ={_currentOffsetZ:F2}, " +
-            $"speedToOffset={speedToOffset:F2}, planarSpeed={planarSpeed:F2}, smVel=({smVel.x:F2},{smVel.z:F2}), " +
-            $"flatErr=({flatErr.x:F2},{flatErr.z:F2})m, desiredTarget=({desiredTarget.x:F2},{desiredTarget.z:F2}), " +
-            $"snapTarget=({snapTarget.x:F2},{snapTarget.z:F2}), K={assistK:F1}, D={(assistD <= 0f ? -1f : assistD):F1}"
-        );
+        //string holdStr = holding ? "HOLD" : "FOLLOW";
+        //Debug.Log(
+        //    $"[Ball/PD-{holdStr}] owner={(Owner ? Owner.name : "null")}, assist={assistEnabled}, " +
+        //    $"localOffset={assistLocalOffset}, baseOffsetZ={baseOffsetZ:F2}, curZ={_currentOffsetZ:F2}, " +
+        //    $"speedToOffset={speedToOffset:F2}, planarSpeed={planarSpeed:F2}, smVel=({smVel.x:F2},{smVel.z:F2}), " +
+        //    $"flatErr=({flatErr.x:F2},{flatErr.z:F2})m, desiredTarget=({desiredTarget.x:F2},{desiredTarget.z:F2}), " +
+        //    $"snapTarget=({snapTarget.x:F2},{snapTarget.z:F2}), K={assistK:F1}, D={(assistD <= 0f ? -1f : assistD):F1}"
+        //);
     }
 
     void TryLogLegacy(float speed, float curZOrBaseZ, Vector3 targetWorld)
