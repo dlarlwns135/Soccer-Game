@@ -1,5 +1,7 @@
 using UnityEngine;
+using UnityEngine.VFX;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 
 [RequireComponent(typeof(Rigidbody))]
@@ -75,11 +77,56 @@ public class Ball : MonoBehaviour
     [SerializeField] Transform fxRoot;                 // 빈 오브젝트(자식에 파티클 4개가 달려있음)
     List<ParticleSystem> fxList = new List<ParticleSystem>();
 
+    // ===== VFX Graph (dissolve/flight) =====
+    [Header("Disappear VFX (VFX Graph)")]
+    [SerializeField] private VisualEffect disappearVFX;   // 그래프 레퍼런스
+    [SerializeField] private bool useSpawnRateParam = true;
+    [SerializeField] private string spawnRateParam = "SpawnRate";
+    [SerializeField] private float hideDelay = 0.15f;     // 그래프 시작 후 공 숨기기까지 지연
+    [SerializeField] private float spawnDuration = 0.6f;  // 생성 유지 시간
+    [SerializeField] private Renderer[] renderersToToggle; // 비워두면 자동 수집
+    [SerializeField] private float effectDuration = 5f;
+    [SerializeField] private float followSyncDuration = 2.5f; // 시작 후 몇 초 동안만 추적
+    private float disappearStartTime;
+
+    bool isDisappearing;
+    int spawnRateID;
+
     void Awake()
     {
         rb = GetComponent<Rigidbody>();
         rb.maxAngularVelocity = 50f;
         CacheFx();
+
+        if (renderersToToggle == null || renderersToToggle.Length == 0)
+            renderersToToggle = GetComponentsInChildren<Renderer>(true);
+
+        if (!string.IsNullOrEmpty(spawnRateParam))
+            spawnRateID = Shader.PropertyToID(spawnRateParam);
+    }
+
+    void Update()
+    {
+        // 테스트 트리거
+        if (Input.GetKeyDown(KeyCode.T))
+            TriggerDisappear();
+    }
+
+    void LateUpdate()
+    {
+        if (!disappearVFX) return;
+
+        // 사라지는 중에만 따라가게 하려면 조건 유지
+        if (isDisappearing)
+        {
+            if (Time.time - disappearStartTime <= followSyncDuration)
+            {
+                var t = disappearVFX.transform;
+                // 공 기준 로컬 오프셋을 월드로 변환
+                Vector3 pos = transform.TransformPoint(Vector3.zero);
+                t.SetPositionAndRotation(pos, transform.rotation);
+            }
+        }
     }
 
     void CacheFx()
@@ -87,6 +134,66 @@ public class Ball : MonoBehaviour
         fxList.Clear();
         if (!fxRoot) return;
         fxList.AddRange(fxRoot.GetComponentsInChildren<ParticleSystem>(true));
+    }
+
+    public void TriggerDisappear()
+    {
+        if (!disappearVFX || isDisappearing) return;
+        StartCoroutine(CoDisappear());
+    }
+
+    IEnumerator CoDisappear()
+    {
+        isDisappearing = true;
+        disappearStartTime = Time.time;
+
+        // VFX를 공 위치/회전으로 맞춤
+        var vfxTr = disappearVFX.transform;
+        vfxTr.SetPositionAndRotation(transform.position, transform.rotation);
+
+        disappearVFX.Reinit();
+        disappearVFX.Play();
+
+        if (useSpawnRateParam && disappearVFX.HasFloat(spawnRateID))
+            disappearVFX.SetFloat(spawnRateID, 1f);
+
+        float elapsed = 0f;
+
+        // 1) 일정 시간 후 공 숨기기
+        if (hideDelay > 0f)
+        {
+            while (elapsed < hideDelay) { elapsed += Time.deltaTime; yield return null; }
+        }
+        SetBallVisible(false);
+
+        // 2) 스폰 유지 후 끄기
+        if (spawnDuration > 0f)
+        {
+            float target = elapsed + spawnDuration;
+            while (elapsed < target) { elapsed += Time.deltaTime; yield return null; }
+        }
+
+        if (useSpawnRateParam && disappearVFX.HasFloat(spawnRateID))
+            disappearVFX.SetFloat(spawnRateID, 0f);
+
+        // 3) 총 5초(effectDuration)까지 대기
+        while (elapsed < effectDuration) { elapsed += Time.deltaTime; yield return null; }
+
+        // 마무리
+        SetBallVisible(true);
+        isDisappearing = false;
+        disappearVFX.Stop();
+    }
+
+
+    void SetBallVisible(bool visible)
+    {
+        if (renderersToToggle == null) return;
+        for (int i = 0; i < renderersToToggle.Length; ++i)
+        {
+            var r = renderersToToggle[i];
+            if (r) r.enabled = visible;
+        }
     }
 
     void PlayKickFX(Vector3 pos, Vector3 dir)
