@@ -734,7 +734,7 @@ MonoBehaviour:
   heavyThreshold01: 0.6
   turnSmoothTime: 0.1
   actionTag: Action
-  shootVFX: {fileID: 1583743713}
+  shootVFX: {fileID: 0}
 --- !u!114 &29429094
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -6600,6 +6600,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 4b15a2d2b23414f44b9bd03ea858f5b1, type: 3}
       insertIndex: -1
       addedObject: {fileID: 698674703}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 4b15a2d2b23414f44b9bd03ea858f5b1, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 698674706}
   m_SourcePrefab: {fileID: 100100000, guid: 4b15a2d2b23414f44b9bd03ea858f5b1, type: 3}
 --- !u!4 &332241518 stripped
 Transform:
@@ -18566,6 +18569,27 @@ CharacterController:
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0.001
   m_Center: {x: 0, y: 0.9437, z: 0}
+--- !u!114 &698674706
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 698674700}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0bdf251b2b6f01041b6ef250f7380a91, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Goalkeeper
+  ball: {fileID: 930301426}
+  lookSpeed: 5
+  viewAngle: 180
+  minApproachSpeed: 8
+  triggerDistance: 20
+  maxPredictTime: 1
+  sideDeadZone: 0.3
+  diveHeight: 1
+  diveCenter: {x: 0, y: 1.8074, z: 0}
 --- !u!4 &698702804 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 1572212868721245019, guid: a207815e67e74384898f047109e4070b, type: 3}
@@ -19797,7 +19821,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!65 &772032372
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -22144,6 +22168,11 @@ MonoBehaviour:
   renderersToToggle: []
   effectDuration: 5
   followSyncDuration: 2.5
+--- !u!4 &930301426 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 4935240531098310, guid: ec3e8f3ed27e2244caaedaf589590a03, type: 3}
+  m_PrefabInstance: {fileID: 1678654656}
+  m_PrefabAsset: {fileID: 0}
 --- !u!4 &934601813 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 3038417975366139255, guid: b725ad0ca392af549a7335dfb07959dd, type: 3}
@@ -27874,13 +27903,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 963194225}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.01551539, y: 0, z: 0, w: 0.99987966}
+  m_LocalRotation: {x: 0.010971037, y: -0.70702165, z: 0.010971037, w: 0.70702165}
   m_LocalPosition: {x: 1818.86, y: 10.2, z: 1818}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 1.778, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 1.778, y: -90, z: 0}
 --- !u!114 &963194229
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -27893,9 +27922,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 75cfd3c27e864b049a3b9f0eeba71f11, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TopDownCameraFollow
+  mode: 0
   target: {fileID: 29429092}
-  height: 2
-  offset: {x: 0, y: 0, z: -5}
+  normalXOffset: 5
+  normalHeightOffset: 3
+  normalLookDownAngle: 10
+  backDistance: 5
+  backHeight: 3
+  backLookDownAngle: 15
   smoothTime: 0.15
 --- !u!114 &963194230
 MonoBehaviour:
@@ -43373,6 +43407,11 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 3962168960273006293, guid: c3ae2779724c97f468ae34dd3c28a524, type: 3}
   m_PrefabInstance: {fileID: 1979540342}
   m_PrefabAsset: {fileID: 0}
+--- !u!23 &1500888226 stripped
+MeshRenderer:
+  m_CorrespondingSourceObject: {fileID: 2789803436960990650, guid: c3ae2779724c97f468ae34dd3c28a524, type: 3}
+  m_PrefabInstance: {fileID: 1979540342}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &1503177453
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -43643,6 +43682,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
   ball: {fileID: 930301422}
   ballSpawnPoint: {fileID: 622002875}
+  fieldRenderer: {fileID: 1500888226}
   restartDelay: 1
 --- !u!4 &1520414173
 Transform:
@@ -56528,6 +56568,10 @@ PrefabInstance:
     - target: {fileID: 919132149155446097, guid: 1a77567451260ee469d7f3b529cbf249, type: 3}
       propertyPath: m_Name
       value: Isagi
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 1a77567451260ee469d7f3b529cbf249, type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5866666021909216657, guid: 1a77567451260ee469d7f3b529cbf249, type: 3}
       propertyPath: m_Controller

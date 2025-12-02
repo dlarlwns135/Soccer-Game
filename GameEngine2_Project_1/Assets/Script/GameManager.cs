@@ -11,6 +11,9 @@ public class GameManager : MonoBehaviour
     [Header("Field Settings")]
     public Transform ballSpawnPoint;
 
+    // 경기장 바닥 메쉬(또는 콜라이더)에 붙은 Renderer
+    [SerializeField] private Renderer fieldRenderer;
+
     [Header("Restart")]
     public float restartDelay = 1.0f;
 
@@ -39,6 +42,28 @@ public class GameManager : MonoBehaviour
                 Debug.Log("Ball reset manually by Q key");
             }
         }
+
+        // 경기 중일 때 공이 필드 밖으로 나갔는지 체크
+        if (_inPlay && ball != null && fieldRenderer != null)
+        {
+            Vector3 pos = ball.transform.position;
+            if (!IsBallOverField(pos))
+            {
+                // 한 번이라도 bounds 밖으로 나간 프레임에 바로 아웃 처리
+                OnBallOutOfPlay(ball, pos);
+            }
+        }
+    }
+
+    // 경기장 bounds 안에 있는지(x,z 기준) 체크
+    bool IsBallOverField(Vector3 worldPos)
+    {
+        Bounds b = fieldRenderer.bounds;
+
+        bool insideX = worldPos.x >= b.min.x && worldPos.x <= b.max.x;
+        bool insideZ = worldPos.z >= b.min.z && worldPos.z <= b.max.z;
+
+        return insideX && insideZ;
     }
 
     // ====== 외부에서 호출 ======
@@ -53,12 +78,11 @@ public class GameManager : MonoBehaviour
 
     public void OnGoalScored(GoalTrigger.Side side, Ball b)
     {
-        if (!_inPlay) return;
-        _inPlay = false;
+        //if (!_inPlay) return;
+        //_inPlay = false;
 
         Debug.Log($"GOAL! Side = {side}");
-        // TODO: 점수 갱신, UI 연출 등
-        StartCoroutine(RestartRoutine("KickOff", restartDelay));
+        //StartCoroutine(RestartRoutine("KickOff", restartDelay));
     }
 
     IEnumerator RestartRoutine(string reason, float delay)

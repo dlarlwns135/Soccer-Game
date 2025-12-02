@@ -51,7 +51,10 @@ public class PlayerAnimatorInput : MonoBehaviour
         // 1) 입력
         float xIn = Input.GetAxisRaw("Horizontal");
         float yIn = Input.GetAxisRaw("Vertical");
-        Vector2 target = new Vector2(xIn, yIn);
+        //Vector2 target = new Vector2(xIn, yIn);
+        float rotX = -yIn;
+        float rotY = xIn;
+        Vector2 target = new Vector2(rotX, rotY);
         if (target.sqrMagnitude > 1f) target.Normalize();
 
         // 2) 스무딩
