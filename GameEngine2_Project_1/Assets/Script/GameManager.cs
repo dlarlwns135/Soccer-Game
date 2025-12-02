@@ -19,6 +19,38 @@ public class GameManager : MonoBehaviour
 
     bool _inPlay = true;   // 중복 판정 방지 플래그
 
+    public enum TestMovePreset
+    {
+        Right,
+        Middle,
+        Left
+    }
+
+    [Header("Test Move (Y key)")]
+    public float testMoveSpeed = 10f;
+
+    public TestMovePreset testPreset = TestMovePreset.Right;
+
+    public Vector3 testTargetPos = new Vector3(0f, 0.3f, 0f);
+
+    void OnValidate()
+    {
+        switch (testPreset)
+        {
+            case TestMovePreset.Right:
+                testTargetPos = new Vector3(1796.56f, 7f, 1820f);
+                break;
+
+            case TestMovePreset.Middle:
+                testTargetPos = new Vector3(1796.56f, 7f, 1821.6f);
+                break;
+
+            case TestMovePreset.Left:
+                testTargetPos = new Vector3(1796.56f, 7f, 1823f);
+                break;
+        }
+    }
+
     void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
@@ -33,6 +65,26 @@ public class GameManager : MonoBehaviour
 
     void Update()
     {
+        if (Input.GetKeyDown(KeyCode.Y))
+        {
+            if (ball != null)
+            {
+                Vector3 toTarget = (testTargetPos - ball.transform.position);
+
+                // 높이 보정은 옵션
+                //toTarget.y = 0.1f;
+
+                float dist = toTarget.magnitude;
+
+                // 거리 기반으로 적절한 힘을 주는 예시
+                float power = Mathf.Clamp(dist * 1.2f, 5f, 25f);
+
+                ball.Kick(toTarget.normalized, power);
+
+                Debug.Log($"[TestKick] Kick toward {testTargetPos} with power {power}");
+            }
+        }
+
         // Q 키를 누르면 공 리셋
         if (Input.GetKeyDown(KeyCode.Q))
         {

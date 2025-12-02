@@ -13,13 +13,14 @@ public class Goalkeeper : MonoBehaviour
 
     [Header("Ball Reference")]
     public Transform ball;
+    public Ball ballLogic;
 
     [Header("Looking Settings")]
     public float lookSpeed = 3f;
     public float viewAngle = 180f;
 
     [Header("Dive Settings")]
-    public float minApproachSpeed = 14f;
+    public float minApproachSpeed = 8f;
     public float triggerDistance = 20f;
     public float maxPredictTime = 1.0f;
     public float sideDeadZone = 0.3f;
@@ -32,6 +33,55 @@ public class Goalkeeper : MonoBehaviour
 
     private float _origHeight;
     private Vector3 _origCenter;
+
+    [Header("IK Settings")]
+    public bool enableIK = true;
+    public float ikActivateDistance = 20.5f;
+    public float ikPositionLerpSpeed = 100f;
+
+    // 기본 IK weight 속도
+    public float ikWeightLerpSpeed = 50f;
+    // DiveMiddle일 때만 사용할 느린 속도
+    public float ikWeightLerpSpeedMiddle = 10f;
+
+    public Vector3 ikOffset = new Vector3(0f, 0.2f, 0f);
+
+    float _currentIKWeight = 0f;
+
+    Vector3 _debugLeftIKPos;
+    Vector3 _debugRightIKPos;
+
+    [Header("Hand IK Curve Data (Right Dive / 기본)")]
+    public FootCurveData leftHandCurve;        // 기본 혹은 DiveRight용
+    public FootCurveData rightHandCurve;
+
+    [Header("Hand IK Curve Data (Left / Middle Dive)")]
+    public FootCurveData leftHandCurve_Left;
+    public FootCurveData rightHandCurve_Left;
+    public FootCurveData leftHandCurve_Middle;
+    public FootCurveData rightHandCurve_Middle;
+
+    // 현재 재생 중인 다이브에 사용할 커브(실제 IK/기즈모는 이걸 사용)
+    FootCurveData _activeLeftCurve;
+    FootCurveData _activeRightCurve;
+
+    // 지금 다이브가 Middle인지 여부
+    bool _currentDiveIsMiddle = false;
+
+    [Header("Hand IK Anim")]
+    public string diveStateTag = "Dive";
+
+    private bool _diveIkEnabled = false;
+
+    [Header("Hand Curve Gizmo")]
+    public bool drawHandCurves = true;
+    public int handCurveSteps = 24;
+    public Color leftHandCurveColor = Color.magenta;
+    public Color rightHandCurveColor = Color.cyan;
+    public float handCurvePointRadius = 0.02f;
+
+    [Header("Manual Dive Limit")]
+    public float minBallWorldX = 1796.56f;
 
     void Start()
     {
@@ -52,7 +102,16 @@ public class Goalkeeper : MonoBehaviour
         }
 
         if (ball != null)
+        {
             _ballRb = ball.GetComponent<Rigidbody>();
+            if (ballLogic == null)
+                ballLogic = ball.GetComponent<Ball>();
+        }
+
+        // 기본값: 아무 설정 안 하면 오른쪽 다이브 커브(기존 필드)를 active로 사용
+        _activeLeftCurve = leftHandCurve;
+        _activeRightCurve = rightHandCurve;
+        _currentDiveIsMiddle = false;
     }
 
     void Update()
@@ -113,7 +172,10 @@ public class Goalkeeper : MonoBehaviour
         if (_ballRb == null)
             return;
 
-        Vector3 v = _ballRb.linearVelocity;   // 버전 따라 velocity일 수도 있음
+        if (ballLogic != null && !ballLogic.IsFree)
+            return;
+
+        Vector3 v = _ballRb.linearVelocity;
         float speed = v.magnitude;
 
         if (speed < minApproachSpeed)
@@ -123,6 +185,9 @@ public class Goalkeeper : MonoBehaviour
         float distance = toKeeper.magnitude;
 
         if (distance > triggerDistance || distance < 0.1f)
+            return;
+
+        if (ball.position.x < minBallWorldX)
             return;
 
         Vector3 vFlat = v;
@@ -145,23 +210,34 @@ public class Goalkeeper : MonoBehaviour
 
         BeginDive();
 
+        // 여기서 다이브 방향 + 커브 세팅 + Middle 여부를 동시에 결정
         if (sideX < -sideDeadZone)
         {
             _animator.SetTrigger("DiveLeft");
+            _activeLeftCurve = leftHandCurve_Left;
+            _activeRightCurve = rightHandCurve_Left;
+            _currentDiveIsMiddle = false;
         }
         else if (sideX > sideDeadZone)
         {
             _animator.SetTrigger("DiveRight");
+            _activeLeftCurve = leftHandCurve;        // 오른쪽은 기본 커브 사용
+            _activeRightCurve = rightHandCurve;
+            _currentDiveIsMiddle = false;
         }
         else
         {
             _animator.SetTrigger("DiveMiddle");
+            _activeLeftCurve = leftHandCurve_Middle;
+            _activeRightCurve = rightHandCurve_Middle;
+            _currentDiveIsMiddle = true;             // Middle 다이브 표시
         }
     }
 
     void BeginDive()
     {
         _isDiving = true;
+        _diveIkEnabled = false;
 
         if (_characterController != null)
         {
@@ -177,42 +253,310 @@ public class Goalkeeper : MonoBehaviour
 
     private IEnumerator ResetCoroutine()
     {
-        // 1) 혹시 모를 루트 모션 영향 끄기 (필요하다면)
         _animator.applyRootMotion = false;
 
-        // 2) 캐릭터컨트롤러가 있으면 Move로 강제 이동
         if (_characterController != null)
         {
-            // 다이브 때 줄였던 캡슐 되돌리고
             _characterController.height = _origHeight;
             _characterController.center = _origCenter;
 
-            // 한 프레임 쉬어주고 (애니/물리 정리)
             yield return null;
 
-            // 현재 위치에서 스타트 위치까지의 차이만큼 한 번에 이동
             Vector3 delta = _startPosition - transform.position;
             _characterController.Move(delta);
         }
         else
         {
-            // CC 없으면 그냥 위치 대입
             transform.position = _startPosition;
             yield return null;
         }
 
-        // 3) 회전 리셋
         transform.rotation = _startRotation;
 
         _isDiving = false;
+        _currentDiveIsMiddle = false;   // 상태 리셋
         _animator.Play("Goalkeeper Idle");
 
         _animator.applyRootMotion = true;
     }
 
-
     public void OnDiveFinished()
     {
         ResetToStart();
+    }
+
+    void OnAnimatorIK(int layerIndex)
+    {
+        if (!enableIK) return;
+        if (_animator == null) return;
+        if (ball == null) return;
+
+        // Middle일 때만 더 느린 속도 사용
+        float currentLerpSpeed = _currentDiveIsMiddle ? ikWeightLerpSpeedMiddle : ikWeightLerpSpeed;
+
+        if (!_isDiving || !_diveIkEnabled)
+        {
+            _currentIKWeight = Mathf.MoveTowards(
+                _currentIKWeight,
+                0f,
+                currentLerpSpeed * Time.deltaTime
+            );
+
+            if (_currentIKWeight <= 0.001f)
+            {
+                _animator.SetIKPositionWeight(AvatarIKGoal.LeftHand, 0f);
+                _animator.SetIKRotationWeight(AvatarIKGoal.LeftHand, 0f);
+                _animator.SetIKPositionWeight(AvatarIKGoal.RightHand, 0f);
+                _animator.SetIKRotationWeight(AvatarIKGoal.RightHand, 0f);
+            }
+
+            return;
+        }
+
+        var st = _animator.GetCurrentAnimatorStateInfo(layerIndex);
+
+        if (!st.IsTag(diveStateTag))
+        {
+            return;
+        }
+
+        float norm = st.normalizedTime % 1f;
+
+        // 현재 다이브에 대한 커브가 없으면 단순 IK로 대체
+        if (_activeLeftCurve == null || _activeRightCurve == null)
+        {
+            ApplySimpleHandIK(currentLerpSpeed);
+            return;
+        }
+
+        Vector3 leftLocal = new Vector3(
+            _activeLeftCurve.curveX.Evaluate(norm),
+            _activeLeftCurve.curveY.Evaluate(norm),
+            _activeLeftCurve.curveZ.Evaluate(norm)
+        );
+        Vector3 rightLocal = new Vector3(
+            _activeRightCurve.curveX.Evaluate(norm),
+            _activeRightCurve.curveY.Evaluate(norm),
+            _activeRightCurve.curveZ.Evaluate(norm)
+        );
+
+        Vector3 leftBase = transform.TransformPoint(leftLocal);
+        Vector3 rightBase = transform.TransformPoint(rightLocal);
+
+        Vector3 targetPos = ball.position + ikOffset;
+
+        Vector3 toBall = ball.position - transform.position;
+        toBall.y = 0f;
+        if (toBall.sqrMagnitude < 0.0001f) toBall = transform.forward;
+        Quaternion handRot = Quaternion.LookRotation(toBall, Vector3.up);
+
+        Vector3 forward = transform.forward;
+        forward.y = 0f;
+        if (forward.sqrMagnitude < 0.0001f)
+            forward = Vector3.forward;
+        forward.Normalize();
+
+        Vector3 toBallFromLeft = ball.position - leftBase;
+        Vector3 toBallFromRight = ball.position - rightBase;
+
+        float projL = Vector3.Dot(toBallFromLeft, forward);
+        float projR = Vector3.Dot(toBallFromRight, forward);
+
+        bool ballPastHands = (projL < 0f && projR < 0f);
+
+        float dist = Vector3.Distance(transform.position, ball.position);
+        float targetWeight = 0f;
+
+        if (!ballPastHands && dist <= ikActivateDistance)
+            targetWeight = 1f;
+        else
+            targetWeight = 0f;
+
+        _currentIKWeight = Mathf.MoveTowards(
+            _currentIKWeight,
+            targetWeight,
+            currentLerpSpeed * Time.deltaTime
+        );
+
+        if (_currentIKWeight <= 0.001f)
+        {
+            _animator.SetIKPositionWeight(AvatarIKGoal.LeftHand, 0f);
+            _animator.SetIKRotationWeight(AvatarIKGoal.LeftHand, 0f);
+            _animator.SetIKPositionWeight(AvatarIKGoal.RightHand, 0f);
+            _animator.SetIKRotationWeight(AvatarIKGoal.RightHand, 0f);
+            return;
+        }
+
+        Vector3 leftFinal = Vector3.Lerp(
+            leftBase,
+            targetPos,
+            _currentIKWeight
+        );
+        Vector3 rightFinal = Vector3.Lerp(
+            rightBase,
+            targetPos,
+            _currentIKWeight
+        );
+
+        _animator.SetIKPositionWeight(AvatarIKGoal.LeftHand, _currentIKWeight);
+        _animator.SetIKRotationWeight(AvatarIKGoal.LeftHand, _currentIKWeight);
+        _animator.SetIKPositionWeight(AvatarIKGoal.RightHand, _currentIKWeight);
+        _animator.SetIKRotationWeight(AvatarIKGoal.RightHand, _currentIKWeight);
+
+        _animator.SetIKPosition(AvatarIKGoal.LeftHand, leftFinal);
+        _animator.SetIKRotation(AvatarIKGoal.LeftHand, handRot);
+        _animator.SetIKPosition(AvatarIKGoal.RightHand, rightFinal);
+        _animator.SetIKRotation(AvatarIKGoal.RightHand, handRot);
+
+        _debugLeftIKPos = leftFinal;
+        _debugRightIKPos = rightFinal;
+    }
+
+    void ApplySimpleHandIK(float currentLerpSpeed)
+    {
+        Transform leftHandTr = _animator.GetBoneTransform(HumanBodyBones.LeftHand);
+        Transform rightHandTr = _animator.GetBoneTransform(HumanBodyBones.RightHand);
+
+        Vector3 forward = transform.forward;
+        forward.y = 0f;
+        if (forward.sqrMagnitude < 0.0001f)
+            forward = Vector3.forward;
+        forward.Normalize();
+
+        bool ballPastHands = false;
+
+        if (leftHandTr != null && rightHandTr != null)
+        {
+            float projL = Vector3.Dot(ball.position - leftHandTr.position, forward);
+            float projR = Vector3.Dot(ball.position - rightHandTr.position, forward);
+            ballPastHands = (projL < 0f && projR < 0f);
+        }
+
+        float dist = Vector3.Distance(transform.position, ball.position);
+        float targetWeight = 0f;
+
+        if (!ballPastHands && dist <= ikActivateDistance)
+            targetWeight = 1f;
+        else
+            targetWeight = 0f;
+
+        _currentIKWeight = Mathf.MoveTowards(
+            _currentIKWeight,
+            targetWeight,
+            currentLerpSpeed * Time.deltaTime
+        );
+
+        if (_currentIKWeight <= 0.001f)
+        {
+            _animator.SetIKPositionWeight(AvatarIKGoal.LeftHand, 0f);
+            _animator.SetIKRotationWeight(AvatarIKGoal.LeftHand, 0f);
+            _animator.SetIKPositionWeight(AvatarIKGoal.RightHand, 0f);
+            _animator.SetIKRotationWeight(AvatarIKGoal.RightHand, 0f);
+            return;
+        }
+
+        Vector3 targetPos = ball.position + ikOffset;
+
+        Vector3 toBall = ball.position - transform.position;
+        toBall.y = 0f;
+        if (toBall.sqrMagnitude < 0.0001f) toBall = transform.forward;
+        Quaternion handRot = Quaternion.LookRotation(toBall, Vector3.up);
+
+        Vector3 leftPos = _animator.GetIKPosition(AvatarIKGoal.LeftHand);
+        Vector3 rightPos = _animator.GetIKPosition(AvatarIKGoal.RightHand);
+
+        leftPos = Vector3.Lerp(leftPos, targetPos, ikPositionLerpSpeed * Time.deltaTime);
+        rightPos = Vector3.Lerp(rightPos, targetPos, ikPositionLerpSpeed * Time.deltaTime);
+
+        _animator.SetIKPositionWeight(AvatarIKGoal.LeftHand, _currentIKWeight);
+        _animator.SetIKRotationWeight(AvatarIKGoal.LeftHand, _currentIKWeight);
+        _animator.SetIKPositionWeight(AvatarIKGoal.RightHand, _currentIKWeight);
+        _animator.SetIKRotationWeight(AvatarIKGoal.RightHand, _currentIKWeight);
+
+        _animator.SetIKPosition(AvatarIKGoal.LeftHand, leftPos);
+        _animator.SetIKRotation(AvatarIKGoal.LeftHand, handRot);
+        _animator.SetIKPosition(AvatarIKGoal.RightHand, rightPos);
+        _animator.SetIKRotation(AvatarIKGoal.RightHand, handRot);
+
+        _debugLeftIKPos = leftPos;
+        _debugRightIKPos = rightPos;
+    }
+
+    void OnDrawGizmos()
+    {
+        if (Application.isPlaying)
+        {
+            Gizmos.color = Color.green;
+            Gizmos.DrawSphere(_debugLeftIKPos, 0.1f);
+
+            Gizmos.color = Color.blue;
+            Gizmos.DrawSphere(_debugRightIKPos, 0.1f);
+        }
+
+        if (!drawHandCurves)
+            return;
+
+        // 플레이 중에는 현재 다이브에 해당하는 커브만 시각화
+        if (Application.isPlaying)
+        {
+            if (_activeLeftCurve != null)
+                DrawHandCurveGizmo(_activeLeftCurve, leftHandCurveColor);
+
+            if (_activeRightCurve != null)
+                DrawHandCurveGizmo(_activeRightCurve, rightHandCurveColor);
+        }
+        else
+        {
+            // 에디터에서 미리 보고 싶으면 기본 오른쪽 다이브 커브를 사용
+            if (leftHandCurve != null)
+                DrawHandCurveGizmo(leftHandCurve, leftHandCurveColor);
+
+            if (rightHandCurve != null)
+                DrawHandCurveGizmo(rightHandCurve, rightHandCurveColor);
+        }
+    }
+
+    void DrawHandCurveGizmo(FootCurveData curveData, Color color)
+    {
+        if (curveData == null)
+            return;
+
+        int steps = Mathf.Max(4, handCurveSteps);
+
+        Gizmos.color = color;
+
+        Vector3 prev = Vector3.zero;
+        bool hasPrev = false;
+
+        for (int i = 0; i <= steps; i++)
+        {
+            float t = i / (float)steps;
+
+            Vector3 localP = new Vector3(
+                curveData.curveX.Evaluate(t),
+                curveData.curveY.Evaluate(t),
+                curveData.curveZ.Evaluate(t)
+            );
+
+            Vector3 worldP = transform.TransformPoint(localP);
+
+            Gizmos.DrawSphere(worldP, handCurvePointRadius);
+
+            if (hasPrev)
+                Gizmos.DrawLine(prev, worldP);
+
+            prev = worldP;
+            hasPrev = true;
+        }
+    }
+
+    public void AnimEvent_DiveIKOn()
+    {
+        _diveIkEnabled = true;
+    }
+
+    public void AnimEvent_DiveIKOff()
+    {
+        _diveIkEnabled = false;
     }
 }

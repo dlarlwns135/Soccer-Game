@@ -21,7 +21,7 @@ AnimatorState:
   m_CycleOffsetParameterActive: 0
   m_TimeParameterActive: 0
   m_Motion: {fileID: -203655887218126122, guid: d12ca7ff2f721074e8eed86a7f183498, type: 3}
-  m_Tag: 
+  m_Tag: Dive
   m_SpeedParameter: 
   m_MirrorParameter: 
   m_CycleOffsetParameter: 
@@ -47,7 +47,7 @@ AnimatorState:
   m_CycleOffsetParameterActive: 0
   m_TimeParameterActive: 0
   m_Motion: {fileID: -203655887218126122, guid: 45e775b3412b91d4a8d147dc519d64e1, type: 3}
-  m_Tag: 
+  m_Tag: Dive
   m_SpeedParameter: 
   m_MirrorParameter: 
   m_CycleOffsetParameter: 
@@ -145,7 +145,7 @@ AnimatorController:
     m_BlendingMode: 0
     m_SyncedLayerIndex: -1
     m_DefaultWeight: 0
-    m_IKPass: 0
+    m_IKPass: 1
     m_SyncedLayerAffectsTiming: 0
     m_Controller: {fileID: 9100000}
 --- !u!1101 &1593041223287413825
@@ -223,7 +223,7 @@ AnimatorState:
   m_CycleOffsetParameterActive: 0
   m_TimeParameterActive: 0
   m_Motion: {fileID: -203655887218126122, guid: 521042b0fc752a84da2e21d2be2ce08e, type: 3}
-  m_Tag: 
+  m_Tag: Dive
   m_SpeedParameter: 
   m_MirrorParameter: 
   m_CycleOffsetParameter: 
