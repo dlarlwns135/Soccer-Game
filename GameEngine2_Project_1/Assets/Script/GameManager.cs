@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections;
+using TMPro;
 
 public class GameManager : MonoBehaviour
 {
@@ -18,6 +19,16 @@ public class GameManager : MonoBehaviour
     public float restartDelay = 1.0f;
 
     bool _inPlay = true;   // 중복 판정 방지 플래그
+
+    // ===== Score =====
+    [Header("Score Settings")]
+    [SerializeField] int playerScore = 0;
+    [SerializeField] int goalReward = 2;         // 골 넣으면 +1
+    [SerializeField] int outOfPlayPenalty = 1;   // 그냥 아웃이면 -1
+    [SerializeField] int savePenalty = 1;        // 골키퍼 세이브면 -2
+
+    [Header("Score UI")]
+    [SerializeField] private TextMeshProUGUI scoreText;
 
     public enum TestMovePreset
     {
@@ -61,6 +72,8 @@ public class GameManager : MonoBehaviour
     {
         if (ball != null && ballSpawnPoint != null)
             ball.ResetPosition(ballSpawnPoint.position);
+
+        UpdateScoreUI();
     }
 
     void Update()
@@ -124,6 +137,8 @@ public class GameManager : MonoBehaviour
         if (!_inPlay) return;
         _inPlay = false;
 
+        AddScore(-outOfPlayPenalty);
+
         Debug.Log($"Out of play at {at}");
         StartCoroutine(RestartRoutine("ThrowIn/GoalKick (simple)", restartDelay));
     }
@@ -134,6 +149,7 @@ public class GameManager : MonoBehaviour
         //_inPlay = false;
 
         Debug.Log($"GOAL! Side = {side}");
+        AddScore(goalReward);
         //StartCoroutine(RestartRoutine("KickOff", restartDelay));
     }
 
@@ -152,6 +168,8 @@ public class GameManager : MonoBehaviour
     public void OnGoal()
     {
         Debug.Log("Goal! (manual)");
+
+
         if (ballSpawnPoint != null && ball != null)
             ball.ResetPosition(ballSpawnPoint.position);
     }
@@ -163,6 +181,8 @@ public class GameManager : MonoBehaviour
         {
             ball.SetOwner(keeper.transform);
             ball.SetKeeperOwned(true);
+
+            AddScore(-savePenalty);
 
             StartCoroutine(CoKeeperReset());
         }
@@ -181,5 +201,17 @@ public class GameManager : MonoBehaviour
         }
 
         Debug.Log("Ball reset after goalkeeper save");
+    }
+
+    void UpdateScoreUI()
+    {
+        if (scoreText != null)
+            scoreText.text = $"Score: {playerScore}";
+    }
+
+    void AddScore(int delta)
+    {
+        playerScore += delta;
+        UpdateScoreUI();
     }
 }
