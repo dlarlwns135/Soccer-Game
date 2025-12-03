@@ -155,4 +155,31 @@ public class GameManager : MonoBehaviour
         if (ballSpawnPoint != null && ball != null)
             ball.ResetPosition(ballSpawnPoint.position);
     }
+
+    public void OnGoalkeeperSaved(Transform keeper)
+    {
+        Debug.Log("Goalkeeper Saved!");
+        if (ball != null)
+        {
+            ball.SetOwner(keeper.transform);
+            ball.SetKeeperOwned(true);
+
+            StartCoroutine(CoKeeperReset());
+        }
+    }
+
+    IEnumerator CoKeeperReset()
+    {
+        yield return new WaitForSeconds(1f);
+
+        // 공 소유 해제 + 리셋
+        if (ball != null && ballSpawnPoint != null)
+        {
+            ball.SetKeeperOwned(false);
+            ball.Release();
+            ball.ResetPosition(ballSpawnPoint.position);
+        }
+
+        Debug.Log("Ball reset after goalkeeper save");
+    }
 }

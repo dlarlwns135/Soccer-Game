@@ -83,6 +83,9 @@ public class Goalkeeper : MonoBehaviour
     [Header("Manual Dive Limit")]
     public float minBallWorldX = 1796.56f;
 
+    public Transform leftHand;
+    public Transform rightHand;
+
     void Start()
     {
         _startPosition = transform.position;
@@ -558,5 +561,14 @@ public class Goalkeeper : MonoBehaviour
     public void AnimEvent_DiveIKOff()
     {
         _diveIkEnabled = false;
+    }
+
+    public bool IsInDiveState
+    {
+        get
+        {
+            var state = _animator.GetCurrentAnimatorStateInfo(0);
+            return state.IsTag("Dive");
+        }
     }
 }

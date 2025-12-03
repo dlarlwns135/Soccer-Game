@@ -92,6 +92,17 @@ public class Ball : MonoBehaviour
     bool isDisappearing;
     int spawnRateID;
 
+    // === 골키퍼 전용 ===
+    [Header("Goalkeeper Hold")]
+    [SerializeField] private Transform keeperLeftHand;
+    [SerializeField] private Transform keeperRightHand;
+    bool ownedByKeeper = false;
+
+    public void SetKeeperOwned(bool owned)
+    {
+        ownedByKeeper = owned;
+    }
+
     void Awake()
     {
         rb = GetComponent<Rigidbody>();
@@ -277,6 +288,7 @@ public class Ball : MonoBehaviour
         OnPossessionChanged?.Invoke(null);
         _ownerCC = null;
         _followSuppressed = false;
+        ownedByKeeper = false;   // 추가
 
         if (debugOffsets)
         {
@@ -319,6 +331,24 @@ public class Ball : MonoBehaviour
         // 소유 중
         if (Owner != null)
         {
+            if (ownedByKeeper && keeperLeftHand != null && keeperRightHand != null)
+            {
+                Vector3 lh = keeperLeftHand.position;
+                Vector3 rh = keeperRightHand.position;
+                Vector3 mid = (lh + rh) * 0.5f;
+
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+                rb.MovePosition(mid);   // 또는 transform.position = mid;
+
+                _dbgTargetWorld = mid;
+                _dbgDesiredWorld = mid;
+                _dbgOffsetWorld = mid;
+                _dbgValid = true;
+
+                return; // 아래 Assist/Legacy 로직은 건너뜀
+            }
+
             // 공통: 오너 수평 속도 + 히스테리시스 토글
             Vector3 ccVel = (_ownerCC != null) ? _ownerCC.velocity : Vector3.zero;
             float planarSpeed = new Vector3(ccVel.x, 0f, ccVel.z).magnitude;
